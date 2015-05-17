@@ -3,29 +3,27 @@ pub trait Trace {
     /// Mark all contained Gcs
     fn trace(&self);
     /// Increment the root-count of all contained Gcs
-    unsafe fn root(&self);
+    fn root(&self);
     /// Decrement the root-count of all contained Gcs
-    unsafe fn unroot(&self);
+    fn unroot(&self);
 }
 
-/*
-impl<'a, T> Trace for &'a T {
+impl<T> Trace for &'static T {
     fn trace(&self) {}
-    unsafe fn root(&self) {}
-    unsafe fn unroot(&self) {}
+    fn root(&self) {}
+    fn unroot(&self) {}
 }
-*/
 
 impl<'a, T: Trace> Trace for Box<T> {
     fn trace(&self) {
         (**self).trace();
     }
 
-    unsafe fn root(&self) {
+    fn root(&self) {
         (**self).root();
     }
 
-    unsafe fn unroot(&self) {
+    fn unroot(&self) {
         (**self).unroot();
     }
 }
@@ -37,13 +35,13 @@ impl<'a, T: Trace> Trace for Vec<T> {
         }
     }
 
-    unsafe fn root(&self) {
+    fn root(&self) {
         for e in self {
             e.root();
         }
     }
 
-    unsafe fn unroot(&self) {
+    fn unroot(&self) {
         for e in self {
             e.unroot();
         }
