@@ -1,7 +1,7 @@
 [package]
 name = "gc_plugin"
 version = "0.0.1"
-authors = ["Manish Goregaokar <manishsmail@gmail.com>"]
+authors = ["Manish Goregaokar <manishsmail@gmail.com>", "Michael Layzell <michael@thelayzells.com>"]
 
 [lib]
 name = "gc_plugin"
