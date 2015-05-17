@@ -1,12 +1,15 @@
 #![feature(std_misc, optin_builtin_traits)]
 
+// XXXManishearth see #1
+#![allow(unused_unsafe)]
+
 use std::cell::{self, Cell, RefCell, BorrowState};
 use std::ops::{Deref, DerefMut};
 use std::marker;
 use gc::GcBox;
 
 mod gc;
-mod trace;
+pub mod trace;
 
 #[cfg(test)]
 mod test;
@@ -52,16 +55,22 @@ impl<T: Trace> Trace for Gc<T> {
         self.inner().trace_inner();
     }
 
-    unsafe fn root(&self) {
+    fn root(&self) {
         assert!(!self.root.get(), "Can't double-root a Gc<T>");
         self.root.set(true);
-        self.inner().root_inner();
+        unsafe {
+            // This unsafe block is wrong! (see #1)
+            self.inner().root_inner();
+        }
     }
 
-    unsafe fn unroot(&self) {
+    fn unroot(&self) {
         assert!(self.root.get(), "Can't double-unroot a Gc<T>");
         self.root.set(false);
-        self.inner().unroot_inner();
+        unsafe {
+            // This unsafe block is wrong! (see #1)
+            self.inner().unroot_inner();
+        }
     }
 }
 
@@ -146,12 +155,12 @@ impl<T: Trace> Trace for GcCell<T> {
         }
     }
 
-    unsafe fn root(&self) {
+    fn root(&self) {
         // XXX: Maybe handle this better than panicking? (can we just dodge the check?)
         self.cell.borrow().root();
     }
 
-    unsafe fn unroot(&self) {
+    fn unroot(&self) {
         // XXX: Maybe handle this better than panicking? (can we just dodge the check?)
         self.cell.borrow().unroot();
     }

@@ -26,8 +26,8 @@ impl Drop for ValidChecker {
 
 impl Trace for ValidChecker {
     fn trace(&self) {}
-    unsafe fn root(&self) {}
-    unsafe fn unroot(&self) {}
+    fn root(&self) {}
+    fn unroot(&self) {}
 }
 
 #[test]

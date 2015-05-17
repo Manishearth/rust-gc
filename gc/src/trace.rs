@@ -2,10 +2,11 @@
 pub trait Trace {
     /// Mark all contained Gcs
     fn trace(&self);
+    // Next two should be unsafe (see #1)
     /// Increment the root-count of all contained Gcs
-    unsafe fn root(&self);
+    fn root(&self);
     /// Decrement the root-count of all contained Gcs
-    unsafe fn unroot(&self);
+    fn unroot(&self);
 }
 
 /*
@@ -21,11 +22,11 @@ impl<'a, T: Trace> Trace for Box<T> {
         (**self).trace();
     }
 
-    unsafe fn root(&self) {
+    fn root(&self) {
         (**self).root();
     }
 
-    unsafe fn unroot(&self) {
+    fn unroot(&self) {
         (**self).unroot();
     }
 }
@@ -37,13 +38,13 @@ impl<'a, T: Trace> Trace for Vec<T> {
         }
     }
 
-    unsafe fn root(&self) {
+    fn root(&self) {
         for e in self {
             e.root();
         }
     }
 
-    unsafe fn unroot(&self) {
+    fn unroot(&self) {
         for e in self {
             e.unroot();
         }
