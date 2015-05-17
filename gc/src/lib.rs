@@ -76,10 +76,8 @@ impl<T: Trace> Trace for Gc<T> {
 
 impl<T: Trace> Clone for Gc<T> {
     fn clone(&self) -> Gc<T> {
-        unsafe {
-            self.root();
-            Gc { _ptr: self._ptr, root: Cell::new(true) }
-        }
+        self.root();
+        Gc { _ptr: self._ptr, root: Cell::new(true) }
     }
 }
 
@@ -100,9 +98,7 @@ impl<T: Trace> Drop for Gc<T> {
         // If we are being collected by the garbage collector (we are
         // not a root), then our reference may not be valid anymore due to cycles
         if self.root.get() {
-            unsafe {
-                self.unroot();
-            }
+            self.unroot();
         }
     }
 }
@@ -134,10 +130,8 @@ impl <T: Trace> GcCell<T> {
     pub fn borrow_mut(&self) -> GcCellRefMut<T> {
         let val_ref = self.cell.borrow_mut();
 
-        unsafe {
-            // Root everything inside the box for the lifetime of the GcCellRefMut
-            val_ref.root();
-        }
+        // Root everything inside the box for the lifetime of the GcCellRefMut
+        val_ref.root();
 
         GcCellRefMut {
             _ref: val_ref,
@@ -196,10 +190,8 @@ impl<'a, T: Trace> DerefMut for GcCellRefMut<'a, T> {
 
 impl<'a, T: Trace> Drop for GcCellRefMut<'a, T> {
     fn drop(&mut self) {
-        unsafe {
-            // The data is now within a Gc tree again
-            // we don't have to keep it alive explicitly any longer
-            self._ref.unroot();
-        }
+        // the data is now within a gc tree again
+        // we don't have to keep it alive explicitly any longer
+        self._ref.unroot();
     }
 }

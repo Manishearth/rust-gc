@@ -9,13 +9,11 @@ pub trait Trace {
     fn unroot(&self);
 }
 
-/*
-impl<'a, T> Trace for &'a T {
+impl<T> Trace for &'static T {
     fn trace(&self) {}
-    unsafe fn root(&self) {}
-    unsafe fn unroot(&self) {}
+    fn root(&self) {}
+    fn unroot(&self) {}
 }
-*/
 
 impl<'a, T: Trace> Trace for Box<T> {
     fn trace(&self) {
