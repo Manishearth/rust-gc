@@ -1,0 +1,10 @@
+[package]
+name = "gc"
+version = "0.0.1"
+authors = ["Manish Goregaokar <manishsmail@gmail.com>"]
+
+[dependencies.gc_plugin]
+path = "../gc_plugin"
+
+[dev-dependencies]
+compiletest_rs = "*"
