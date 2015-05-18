@@ -106,6 +106,7 @@ impl<T: Trace> Drop for Gc<T> {
 
 /// A mutable garbage collected pointer/cell hybrid
 pub struct GcCell<T: 'static> {
+    rooted: Cell<bool>,
     cell: RefCell<T>,
 }
 
@@ -116,7 +117,8 @@ impl<T> !marker::Sync for GcCell<T> {}
 impl <T: Trace> GcCell<T> {
     pub fn new(value: T) -> GcCell<T> {
         GcCell{
-            cell: RefCell::new(value)
+            rooted: Cell::new(true),
+            cell: RefCell::new(value),
         }
     }
 
@@ -127,11 +129,14 @@ impl <T: Trace> GcCell<T> {
     pub fn borrow_mut(&self) -> GcCellRefMut<T> {
         let val_ref = self.cell.borrow_mut();
 
-        // Root everything inside the box for the lifetime of the GcCellRefMut
-        val_ref.root();
+        if !self.rooted.get() {
+            // Root everything inside the box for the lifetime of the GcCellRefMut
+            val_ref.root();
+        }
 
         GcCellRefMut {
             _ref: val_ref,
+            _rooted: &self.rooted,
         }
     }
 }
@@ -147,13 +152,26 @@ impl<T: Trace> Trace for GcCell<T> {
     }
 
     fn root(&self) {
-        // XXX: Maybe handle this better than panicking? (can we just dodge the check?)
-        self.cell.borrow().root();
+        assert!(!self.rooted.get(), "Can't root a GcCell Twice!");
+        self.rooted.set(true);
+        match self.cell.borrow_state() {
+            // We don't go in, because it would panic!(),
+            // and also everything inside is already rooted
+            BorrowState::Writing => (),
+            _ => self.cell.borrow().root(),
+        }
     }
 
     fn unroot(&self) {
-        // XXX: Maybe handle this better than panicking? (can we just dodge the check?)
-        self.cell.borrow().unroot();
+        assert!(self.rooted.get(), "Can't unroot a GcCell Twice!");
+        self.rooted.set(false);
+        match self.cell.borrow_state() {
+            // We don't go in, because it would panic!(),
+            // and also everything inside is rooted, and will
+            // be unrooted automatically because of the above .set()
+            BorrowState::Writing => (),
+            _ => self.cell.borrow().unroot(),
+        }
     }
 }
 
@@ -171,6 +189,7 @@ pub type GcCellRef<'a, T> = cell::Ref<'a, T>;
 /// the object, so the object inside must be rooted to prevent it from being collected.
 pub struct GcCellRefMut<'a, T: Trace + 'static> {
     _ref: ::std::cell::RefMut<'a, T>,
+    _rooted: &'a Cell<bool>,
 }
 
 impl<'a, T: Trace> Deref for GcCellRefMut<'a, T> {
@@ -187,8 +206,10 @@ impl<'a, T: Trace> DerefMut for GcCellRefMut<'a, T> {
 
 impl<'a, T: Trace> Drop for GcCellRefMut<'a, T> {
     fn drop(&mut self) {
-        // the data is now within a gc tree again
-        // we don't have to keep it alive explicitly any longer
-        self._ref.unroot();
+        if !self._rooted.get() {
+            // the data is now within a gc tree again
+            // we don't have to keep it alive explicitly any longer
+            self._ref.unroot();
+        }
     }
 }
