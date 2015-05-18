@@ -39,6 +39,7 @@ pub fn expand_trace(cx: &mut ExtCtxt, span: Span, mitem: &MetaItem, item: Annota
                 args: vec!(),
                 ret_ty: ty::nil_ty(),
                 attributes: vec![], // todo: handle inlining
+                is_unsafe: true,
                 combine_substructure: combine_substructure(box trace_substructure)
             },
             MethodDef {
@@ -48,6 +49,7 @@ pub fn expand_trace(cx: &mut ExtCtxt, span: Span, mitem: &MetaItem, item: Annota
                 args: vec!(),
                 ret_ty: ty::nil_ty(),
                 attributes: vec![],
+                is_unsafe: true,
                 combine_substructure: combine_substructure(box trace_substructure)
             },
             MethodDef {
@@ -57,6 +59,7 @@ pub fn expand_trace(cx: &mut ExtCtxt, span: Span, mitem: &MetaItem, item: Annota
                 args: vec!(),
                 ret_ty: ty::nil_ty(),
                 attributes: vec![],
+                is_unsafe: true,
                 combine_substructure: combine_substructure(box trace_substructure)
             }
         ],

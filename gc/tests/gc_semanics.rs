@@ -49,21 +49,21 @@ impl Drop for GcWatch {
 }
 
 impl Trace for GcWatch {
-    fn trace(&self) {
+    unsafe fn trace(&self) {
         self.0.with(|f| {
             let mut of = f.get();
             of.trace += 1;
             f.set(of);
         });
     }
-    fn root(&self) {
+    unsafe fn root(&self) {
         self.0.with(|f| {
             let mut of = f.get();
             of.root += 1;
             f.set(of);
         });
     }
-    fn unroot(&self) {
+    unsafe fn unroot(&self) {
         self.0.with(|f| {
             let mut of = f.get();
             of.unroot += 1;

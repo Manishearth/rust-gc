@@ -1,8 +1,5 @@
 #![feature(std_misc, optin_builtin_traits)]
 
-// XXX Manishearth see #1
-#![allow(unused_unsafe)]
-
 use std::cell::{self, Cell, RefCell, BorrowState};
 use std::ops::{Deref, DerefMut};
 use std::marker;
@@ -48,26 +45,20 @@ impl<T: Trace> Gc<T> {
 }
 
 impl<T: Trace> Trace for Gc<T> {
-    fn trace(&self) {
+    unsafe fn trace(&self) {
         self.inner().trace_inner();
     }
 
-    fn root(&self) {
+    unsafe fn root(&self) {
         assert!(!self.root.get(), "Can't double-root a Gc<T>");
         self.root.set(true);
-        unsafe {
-            // This unsafe block is wrong! (see #1)
-            self.inner().root_inner();
-        }
+        self.inner().root_inner();
     }
 
-    fn unroot(&self) {
+    unsafe fn unroot(&self) {
         assert!(self.root.get(), "Can't double-unroot a Gc<T>");
         self.root.set(false);
-        unsafe {
-            // This unsafe block is wrong! (see #1)
-            self.inner().unroot_inner();
-        }
+        self.inner().unroot_inner();
     }
 }
 
@@ -95,7 +86,7 @@ impl<T: Trace> Drop for Gc<T> {
         // If we are being collected by the garbage collector (we are
         // not a root), then our reference may not be valid anymore due to cycles
         if self.root.get() {
-            self.unroot();
+            unsafe { self.unroot(); }
         }
     }
 }
@@ -131,7 +122,7 @@ impl <T: Trace> GcCell<T> {
 
         if !self.rooted.get() {
             // Root everything inside the box for the lifetime of the GcCellRefMut
-            val_ref.root();
+            unsafe { val_ref.root(); }
         }
 
         GcCellRefMut {
@@ -142,7 +133,7 @@ impl <T: Trace> GcCell<T> {
 }
 
 impl<T: Trace> Trace for GcCell<T> {
-    fn trace(&self) {
+    unsafe fn trace(&self) {
         match self.cell.borrow_state() {
             // We don't go in, because it would panic!(),
             // and also everything inside is already rooted
@@ -151,7 +142,7 @@ impl<T: Trace> Trace for GcCell<T> {
         }
     }
 
-    fn root(&self) {
+    unsafe fn root(&self) {
         assert!(!self.rooted.get(), "Can't root a GcCell Twice!");
         self.rooted.set(true);
         match self.cell.borrow_state() {
@@ -162,7 +153,7 @@ impl<T: Trace> Trace for GcCell<T> {
         }
     }
 
-    fn unroot(&self) {
+    unsafe fn unroot(&self) {
         assert!(self.rooted.get(), "Can't unroot a GcCell Twice!");
         self.rooted.set(false);
         match self.cell.borrow_state() {
@@ -209,7 +200,7 @@ impl<'a, T: Trace> Drop for GcCellRefMut<'a, T> {
         if !self._rooted.get() {
             // the data is now within a gc tree again
             // we don't have to keep it alive explicitly any longer
-            self._ref.unroot();
+            unsafe { self._ref.unroot(); }
         }
     }
 }

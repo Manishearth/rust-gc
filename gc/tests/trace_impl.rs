@@ -12,14 +12,14 @@ use gc::Trace;
 struct Foo;
 
 impl Trace for Foo {
-    fn trace(&self) {
+    unsafe fn trace(&self) {
         X.with(|x| {
             let mut m = x.borrow_mut();
             *m = *m + 1;
         })
     }
-    fn root(&self){}
-    fn unroot(&self){}
+    unsafe fn root(&self){}
+    unsafe fn unroot(&self){}
 }
 
 #[derive(Trace, Copy, Clone)]
@@ -36,7 +36,7 @@ struct Baz {
 #[test]
 fn test() {
     let bar = Bar{inner: Foo};
-    bar.trace();
+    unsafe { bar.trace(); }
     X.with(|x| {
         assert!(*x.borrow() == 1)
     });
@@ -44,7 +44,7 @@ fn test() {
         a: bar,
         b: bar
     };
-    baz.trace();
+    unsafe { baz.trace(); }
     X.with(|x| {
         assert!(*x.borrow() == 3)
     });

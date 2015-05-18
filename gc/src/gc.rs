@@ -33,7 +33,10 @@ pub trait GcBoxTrait {
     fn header_mut(&mut self) -> &mut GcBoxHeader;
 
     /// Mark this GcBox, and trace through it's data
-    fn trace_inner(&self);
+    ///
+    /// This method is unsafe because incorrect use
+    /// could cause visible references to be freed.
+    unsafe fn trace_inner(&self);
 
     /// Increase the root count on this GcBox.
     /// Roots prevent the GcBox from being destroyed by
@@ -62,7 +65,7 @@ impl<T: Trace> GcBoxTrait for GcBox<T> {
 
     fn header_mut(&mut self) -> &mut GcBoxHeader { &mut self.header }
 
-    fn trace_inner(&self) {
+    unsafe fn trace_inner(&self) {
         let marked = self.header.marked.get();
         if !marked {
             self.header.marked.set(true);
@@ -160,7 +163,7 @@ fn collect_garbage(st: &mut GcState) {
             }
             // We trace in a different scope such that node isn't
             // mutably borrowed anymore
-            node.trace_inner();
+            unsafe { node.trace_inner(); }
         } else { break }
     }
 
