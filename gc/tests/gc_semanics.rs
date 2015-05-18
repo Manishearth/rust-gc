@@ -151,3 +151,80 @@ fn basic_cycle_allocate() {
     FLAGS1.with(|f| assert_eq!(f.get(), GcWatchFlags::new(3, 0, 1, 1)));
     FLAGS2.with(|f| assert_eq!(f.get(), GcWatchFlags::new(3, 0, 1, 1)));
 }
+
+#[test]
+fn gccell_rooting() {
+    thread_local!(static FLAGS: Cell<GcWatchFlags> = GcWatchFlags::zero());
+
+    {
+        let cell = GcCell::new(GcWatch(&FLAGS));
+
+        FLAGS.with(|f| assert_eq!(f.get(), GcWatchFlags::new(0, 0, 0, 0)));
+
+        {
+            // Borrow it
+            let _borrowed = cell.borrow();
+            FLAGS.with(|f| assert_eq!(f.get(), GcWatchFlags::new(0, 0, 0, 0)));
+
+            // Shared borrows can happen multiple times in one scope
+            let _borrowed2 = cell.borrow();
+            FLAGS.with(|f| assert_eq!(f.get(), GcWatchFlags::new(0, 0, 0, 0)));
+        }
+
+        FLAGS.with(|f| assert_eq!(f.get(), GcWatchFlags::new(0, 0, 0, 0)));
+
+        {
+            // Borrow it mutably now
+            let _borrowed = cell.borrow_mut();
+            FLAGS.with(|f| assert_eq!(f.get(), GcWatchFlags::new(0, 0, 0, 0)));
+        }
+
+        FLAGS.with(|f| assert_eq!(f.get(), GcWatchFlags::new(0, 0, 0, 0)));
+
+        // Put it in a gc (should unroot the GcWatch)
+        let gc_wrapper = Gc::new(cell);
+        FLAGS.with(|f| assert_eq!(f.get(), GcWatchFlags::new(0, 0, 1, 0)));
+
+        // It should be traced by the GC
+        force_collect();
+        FLAGS.with(|f| assert_eq!(f.get(), GcWatchFlags::new(1, 0, 1, 0)));
+
+        {
+            // Borrow it
+            let _borrowed = gc_wrapper.borrow();
+            FLAGS.with(|f| assert_eq!(f.get(), GcWatchFlags::new(1, 0, 1, 0)));
+
+            // Shared borrows can happen multiple times in one scope
+            let _borrowed2 = gc_wrapper.borrow();
+            FLAGS.with(|f| assert_eq!(f.get(), GcWatchFlags::new(1, 0, 1, 0)));
+
+            // It should be traced by the GC
+            force_collect();
+            FLAGS.with(|f| assert_eq!(f.get(), GcWatchFlags::new(2, 0, 1, 0)));
+        }
+
+        FLAGS.with(|f| assert_eq!(f.get(), GcWatchFlags::new(2, 0, 1, 0)));
+
+        {
+            // Borrow it mutably now - this should root the GcWatch
+            let _borrowed = gc_wrapper.borrow_mut();
+            FLAGS.with(|f| assert_eq!(f.get(), GcWatchFlags::new(2, 1, 1, 0)));
+
+            // It shouldn't be traced by the GC (as it's owned by the GcCell)
+            // If it had rootable members, they would be traced by the GC
+            force_collect();
+            FLAGS.with(|f| assert_eq!(f.get(), GcWatchFlags::new(2, 1, 1, 0)));
+        }
+
+        // Dropping the borrow should unroot it again
+        FLAGS.with(|f| assert_eq!(f.get(), GcWatchFlags::new(2, 1, 2, 0)));
+
+        // It should be traced by the GC
+        force_collect();
+        FLAGS.with(|f| assert_eq!(f.get(), GcWatchFlags::new(3, 1, 2, 0)))
+    }
+
+    // It should be collected by the GC
+    force_collect();
+    FLAGS.with(|f| assert_eq!(f.get(), GcWatchFlags::new(3, 1, 2, 1)))
+}
