@@ -12,6 +12,7 @@ struct GcState {
     boxes_end: *mut Option<Box<GcBoxTrait + 'static>>,
 }
 
+thread_local!(static GC_SWEEPING: Cell<bool> = Cell::new(false));
 thread_local!(static GC_STATE: RefCell<GcState> = RefCell::new(GcState {
     bytes_allocated: 0,
     boxes_start: None,
@@ -133,6 +134,10 @@ impl<T: Trace> GcBox<T> {
 
     /// Get the value form the GcBox
     pub fn value(&self) -> &T {
+        // XXX This may be too expensive, but will help catch errors with
+        // accessing Gc values in destructors.
+        GC_SWEEPING.with(|sweeping| assert!(!sweeping.get(),
+                                            "Gc pointers may be invalid when GC is running"));
         &self.data
     }
 }
@@ -159,6 +164,8 @@ fn collect_garbage(st: &mut GcState) {
         } else { break }
     }
 
+    GC_SWEEPING.with(|collecting| collecting.set(true));
+
     let mut next_node = &mut st.boxes_start
         as *mut Option<Box<GcBoxTrait + 'static>>;
 
@@ -181,8 +188,10 @@ fn collect_garbage(st: &mut GcState) {
                 // At this point, the node is destroyed if it exists due to tmp dropping
             }
         } else { break }
-
     }
+
+    // XXX This should probably be done with some kind of finally guard
+    GC_SWEEPING.with(|collecting| collecting.set(false));
 }
 
 /// Forcibly collects the current thread's garbage
@@ -192,4 +201,3 @@ pub fn force_collect() {
         collect_garbage(&mut *st);
     });
 }
-
