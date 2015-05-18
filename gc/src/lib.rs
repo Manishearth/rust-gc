@@ -1,21 +1,18 @@
 #![feature(std_misc, optin_builtin_traits)]
 
-// XXXManishearth see #1
+// XXX Manishearth see #1
 #![allow(unused_unsafe)]
 
 use std::cell::{self, Cell, RefCell, BorrowState};
 use std::ops::{Deref, DerefMut};
 use std::marker;
-use gc::GcBox;
+use gc::{GcBox, GcBoxTrait};
 
 mod gc;
-pub mod trace;
-
-#[cfg(test)]
-mod test;
+mod trace;
 
 pub use trace::Trace;
-pub use gc::{force_collect, GcBoxTrait};
+pub use gc::force_collect;
 
 ////////
 // Gc //
@@ -76,7 +73,7 @@ impl<T: Trace> Trace for Gc<T> {
 
 impl<T: Trace> Clone for Gc<T> {
     fn clone(&self) -> Gc<T> {
-        self.root();
+        unsafe { self.inner().root_inner(); }
         Gc { _ptr: self._ptr, root: Cell::new(true) }
     }
 }

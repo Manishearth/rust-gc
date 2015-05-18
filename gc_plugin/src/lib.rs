@@ -28,7 +28,7 @@ pub fn expand_trace(cx: &mut ExtCtxt, span: Span, mitem: &MetaItem, item: Annota
     let trait_def = TraitDef {
         span: span,
         attributes: Vec::new(),
-        path: ty::Path::new(vec!("gc", "trace", "Trace")),
+        path: ty::Path::new(vec!("gc", "Trace")),
         additional_bounds: Vec::new(),
         generics: ty::LifetimeBounds::empty(),
         methods: vec![

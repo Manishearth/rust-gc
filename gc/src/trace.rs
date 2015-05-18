@@ -48,3 +48,21 @@ impl<'a, T: Trace> Trace for Vec<T> {
         }
     }
 }
+
+impl<'a, T: Trace> Trace for Option<T> {
+    fn trace(&self) {
+        if let Some(ref v) = *self {
+            v.trace();
+        }
+    }
+    fn root(&self) {
+        if let Some(ref v) = *self {
+            v.root();
+        }
+    }
+    fn unroot(&self) {
+        if let Some(ref v) = *self {
+            v.unroot();
+        }
+    }
+}

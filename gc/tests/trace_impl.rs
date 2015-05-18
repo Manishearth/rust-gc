@@ -6,7 +6,7 @@ use std::cell::RefCell;
 
 thread_local!(static X: RefCell<u8> = RefCell::new(0));
 
-use gc::trace::Trace;
+use gc::Trace;
 
 #[derive(Copy, Clone)]
 struct Foo;
