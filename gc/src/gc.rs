@@ -193,6 +193,9 @@ fn collect_garbage(st: &mut GcState) {
         } else { break }
     }
 
+    // Update the end pointer to point to the correct location
+    st.boxes_end = next_node;
+
     // XXX This should probably be done with some kind of finally guard
     GC_SWEEPING.with(|collecting| collecting.set(false));
 }
