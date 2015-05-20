@@ -228,3 +228,22 @@ fn gccell_rooting() {
     force_collect();
     FLAGS.with(|f| assert_eq!(f.get(), GcWatchFlags::new(3, 1, 2, 1)))
 }
+
+#[test]
+fn trait_gc() {
+    #[derive(Trace)]
+    struct Bar;
+    trait Foo: Trace { fn f(&self) -> i32; }
+    impl Foo for Bar {
+        fn f(&self) -> i32 { 10 }
+    }
+    fn use_trait_gc(x: Gc<Foo>) {
+        assert_eq!(x.f(), 10);
+    }
+
+    let gc_bar = Gc::new(Bar);
+    let gc_foo: Gc<Foo> = gc_bar.clone();
+
+    use_trait_gc(gc_foo);
+    use_trait_gc(gc_bar);
+}

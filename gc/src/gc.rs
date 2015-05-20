@@ -55,12 +55,12 @@ pub trait GcBoxTrait {
     unsafe fn unroot_inner(&self);
 }
 
-pub struct GcBox<T: Trace + 'static> {
+pub struct GcBox<T: Trace + ?Sized + 'static> {
     header: GcBoxHeader,
     data: T,
 }
 
-impl<T: Trace> GcBoxTrait for GcBox<T> {
+impl<T: Trace + ?Sized> GcBoxTrait for GcBox<T> {
     fn header(&self) -> &GcBoxHeader { &self.header }
 
     fn header_mut(&mut self) -> &mut GcBoxHeader { &mut self.header }
@@ -134,7 +134,9 @@ impl<T: Trace> GcBox<T> {
             gcbox_ptr
         })
     }
+}
 
+impl<T: Trace + ?Sized> GcBox<T> {
     /// Get the value form the GcBox
     pub fn value(&self) -> &T {
         // XXX This may be too expensive, but will help catch errors with
