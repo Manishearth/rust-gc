@@ -23,9 +23,9 @@ pub struct Gc<T: Trace + ?Sized + 'static> {
     _ptr: *mut GcBox<T>,
 }
 
-impl<T> !marker::Send for Gc<T> {}
+impl<T: ?Sized> !marker::Send for Gc<T> {}
 
-impl<T> !marker::Sync for Gc<T> {}
+impl<T: ?Sized> !marker::Sync for Gc<T> {}
 
 impl<T: Trace + ?Sized + marker::Unsize<U>, U: Trace + ?Sized> CoerceUnsized<Gc<U>> for Gc<T> {}
 
@@ -104,10 +104,6 @@ pub struct GcCell<T: ?Sized + 'static> {
     rooted: Cell<bool>,
     cell: RefCell<T>,
 }
-
-impl<T> !marker::Send for GcCell<T> {}
-
-impl<T> !marker::Sync for GcCell<T> {}
 
 impl <T: Trace> GcCell<T> {
     pub fn new(value: T) -> GcCell<T> {
