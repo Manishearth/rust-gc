@@ -33,25 +33,16 @@ pub trait GcBoxTrait {
     fn header_mut(&mut self) -> &mut GcBoxHeader;
 
     /// Mark this GcBox, and trace through it's data
-    ///
-    /// This method is unsafe because incorrect use
-    /// could cause visible references to be freed.
     unsafe fn trace_inner(&self);
 
     /// Increase the root count on this GcBox.
     /// Roots prevent the GcBox from being destroyed by
     /// the garbage collector.
-    ///
-    /// This method is unsafe because incorrect use
-    /// could cause visible references to be freed.
     unsafe fn root_inner(&self);
 
     /// Decrease the root count on this GcBox.
     /// Roots prevent the GcBox from being destroyed by
     /// the garbage collector.
-    ///
-    /// This method is unsafe because incorrect use
-    /// could cause visible references to be freed.
     unsafe fn unroot_inner(&self);
 }
 
@@ -83,16 +74,11 @@ impl<T: Trace + ?Sized> GcBoxTrait for GcBox<T> {
 }
 
 impl<T: Trace> GcBox<T> {
-    ///
     /// Allocate a garbage collected GcBox on the heap,
     /// and append it to the thread local GcBox chain.
     ///
     /// The GcBox allocated this way starts it's life
     /// rooted.
-    ///
-    /// # NOTE
-    /// This method could trigger a collection.
-    ///
     pub fn new(value: T) -> *mut GcBox<T> {
         GC_STATE.with(|_st| {
             let mut st = _st.borrow_mut();
@@ -202,7 +188,7 @@ fn collect_garbage(st: &mut GcState) {
     GC_SWEEPING.with(|collecting| collecting.set(false));
 }
 
-/// Forcibly collects the current thread's garbage
+/// Immediately trigger a garbage collection on the current thread.
 pub fn force_collect() {
     GC_STATE.with(|_st| {
         let mut st = _st.borrow_mut();
