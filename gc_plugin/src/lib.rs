@@ -24,7 +24,7 @@ pub fn plugin_registrar(reg: &mut Registry) {
     reg.register_syntax_extension(intern("derive_Trace"), MultiDecorator(box expand_trace))
 }
 
-pub fn expand_trace(cx: &mut ExtCtxt, span: Span, mitem: &MetaItem, item: Annotatable, push: &mut FnMut(Annotatable)) {
+pub fn expand_trace(cx: &mut ExtCtxt, span: Span, mitem: &MetaItem, item: &Annotatable, push: &mut FnMut(Annotatable)) {
     let trait_def = TraitDef {
         span: span,
         attributes: Vec::new(),
@@ -65,7 +65,7 @@ pub fn expand_trace(cx: &mut ExtCtxt, span: Span, mitem: &MetaItem, item: Annota
         ],
         associated_types: vec![],
     };
-    trait_def.expand(cx, mitem, &item, push)
+    trait_def.expand(cx, mitem, item, push)
 }
 
 // Mostly copied from syntax::ext::deriving::hash and Servo's #[jstraceable]
