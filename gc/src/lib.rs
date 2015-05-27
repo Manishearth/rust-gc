@@ -142,6 +142,12 @@ impl <T: Trace> GcCell<T> {
             cell: RefCell::new(value),
         }
     }
+
+    /// Consumes the `GcCell`, returning the wrapped value.
+    #[inline]
+    pub fn into_inner(self) -> T {
+        self.cell.into_inner()
+    }
 }
 
 impl <T: Trace + ?Sized> GcCell<T> {
