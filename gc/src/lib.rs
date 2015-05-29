@@ -9,11 +9,13 @@
 use std::cell::{self, Cell, RefCell, BorrowState};
 use std::ops::{Deref, DerefMut, CoerceUnsized};
 use std::marker;
-use gc::{GcBox, GcBoxTrait};
+use gc::GcBox;
 
 mod gc;
 mod trace;
 
+// We re-export the Trace method, as well as some useful internal methods for
+// managing collections or configuring the garbage collector.
 pub use trace::Trace;
 pub use gc::force_collect;
 
@@ -137,7 +139,7 @@ impl <T: Trace> GcCell<T> {
     /// Creates a new `GcCell` containing `value`.
     #[inline]
     pub fn new(value: T) -> GcCell<T> {
-        GcCell{
+        GcCell {
             rooted: Cell::new(true),
             cell: RefCell::new(value),
         }

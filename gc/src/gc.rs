@@ -12,7 +12,11 @@ struct GcState {
     boxes_end: *mut Option<Box<GcBoxTrait + 'static>>,
 }
 
+/// Whether or not the thread is currently in the sweep phase of garbage collection
+/// During this phase, attempts to dereference a Gc<T> pointer will trigger a panic
 thread_local!(static GC_SWEEPING: Cell<bool> = Cell::new(false));
+
+/// The garbage collector's internal state.
 thread_local!(static GC_STATE: RefCell<GcState> = RefCell::new(GcState {
     bytes_allocated: 0,
     boxes_start: None,
@@ -27,50 +31,25 @@ pub struct GcBoxHeader {
     marked: Cell<bool>,
 }
 
-pub trait GcBoxTrait {
+/// Internal trait - must be implemented by every garbage collected allocation
+/// GcBoxTraits form a linked list of allocations.
+trait GcBoxTrait {
     /// Get a reference to the internal GcBoxHeader
     fn header(&self) -> &GcBoxHeader;
+
+    /// Get a mutable reference to the internal GcBoxHeader
     fn header_mut(&mut self) -> &mut GcBoxHeader;
 
-    /// Mark this GcBox, and trace through it's data
-    unsafe fn trace_inner(&self);
+    /// Initiate a trace through the GcBoxTrait
+    unsafe fn trace_value(&self);
 
-    /// Increase the root count on this GcBox.
-    /// Roots prevent the GcBox from being destroyed by
-    /// the garbage collector.
-    unsafe fn root_inner(&self);
-
-    /// Decrease the root count on this GcBox.
-    /// Roots prevent the GcBox from being destroyed by
-    /// the garbage collector.
-    unsafe fn unroot_inner(&self);
+    /// Get the size of the allocationr required to create the GcBox
+    fn size_of(&self) -> usize;
 }
 
 pub struct GcBox<T: Trace + ?Sized + 'static> {
     header: GcBoxHeader,
     data: T,
-}
-
-impl<T: Trace + ?Sized> GcBoxTrait for GcBox<T> {
-    fn header(&self) -> &GcBoxHeader { &self.header }
-
-    fn header_mut(&mut self) -> &mut GcBoxHeader { &mut self.header }
-
-    unsafe fn trace_inner(&self) {
-        let marked = self.header.marked.get();
-        if !marked {
-            self.header.marked.set(true);
-            self.data.trace();
-        }
-    }
-
-    unsafe fn root_inner(&self) {
-        self.header.roots.set(self.header.roots.get() + 1);
-    }
-
-    unsafe fn unroot_inner(&self) {
-        self.header.roots.set(self.header.roots.get() - 1);
-    }
 }
 
 impl<T: Trace> GcBox<T> {
@@ -123,6 +102,29 @@ impl<T: Trace> GcBox<T> {
 }
 
 impl<T: Trace + ?Sized> GcBox<T> {
+    /// Mark this GcBox, and trace through it's data
+    pub unsafe fn trace_inner(&self) {
+        let marked = self.header.marked.get();
+        if !marked {
+            self.header.marked.set(true);
+            self.data.trace();
+        }
+    }
+
+    /// Increase the root count on this GcBox.
+    /// Roots prevent the GcBox from being destroyed by
+    /// the garbage collector.
+    pub unsafe fn root_inner(&self) {
+        self.header.roots.set(self.header.roots.get() + 1);
+    }
+
+    /// Decrease the root count on this GcBox.
+    /// Roots prevent the GcBox from being destroyed by
+    /// the garbage collector.
+    pub unsafe fn unroot_inner(&self) {
+        self.header.roots.set(self.header.roots.get() - 1);
+    }
+
     /// Get the value form the GcBox
     pub fn value(&self) -> &T {
         // XXX This may be too expensive, but will help catch errors with
@@ -131,6 +133,16 @@ impl<T: Trace + ?Sized> GcBox<T> {
                                             "Gc pointers may be invalid when GC is running"));
         &self.data
     }
+}
+
+impl<T: Trace> GcBoxTrait for GcBox<T> {
+    fn header(&self) -> &GcBoxHeader { &self.header }
+
+    fn header_mut(&mut self) -> &mut GcBoxHeader { &mut self.header }
+
+    unsafe fn trace_value(&self) { self.trace_inner() }
+
+    fn size_of(&self) -> usize { mem::size_of::<T>() }
 }
 
 /// Collect some garbage!
@@ -151,7 +163,7 @@ fn collect_garbage(st: &mut GcState) {
             }
             // We trace in a different scope such that node isn't
             // mutably borrowed anymore
-            unsafe { node.trace_inner(); }
+            unsafe { node.mark_phase_trace_all(); }
         } else { break }
     }
 
@@ -172,6 +184,7 @@ fn collect_garbage(st: &mut GcState) {
                 next_node = &mut header.next;
             } else {
                 // The node wasn't marked - we need to delete it
+                st.bytes_allocated -= node.size_of();
                 let mut tmp = None;
                 mem::swap(&mut tmp, &mut header.next);
                 mem::swap(&mut tmp, unsafe { &mut *next_node });
