@@ -163,7 +163,7 @@ fn collect_garbage(st: &mut GcState) {
             }
             // We trace in a different scope such that node isn't
             // mutably borrowed anymore
-            unsafe { node.mark_phase_trace_all(); }
+            unsafe { node.trace_value(); }
         } else { break }
     }
 
@@ -176,6 +176,7 @@ fn collect_garbage(st: &mut GcState) {
     loop {
         if let Some(ref mut node) = *unsafe { &mut *next_node } {
             // XXX This virtual method call is nasty :(
+            let size = node.size_of();
             let header = node.header_mut();
 
             if header.marked.get() {
@@ -184,7 +185,7 @@ fn collect_garbage(st: &mut GcState) {
                 next_node = &mut header.next;
             } else {
                 // The node wasn't marked - we need to delete it
-                st.bytes_allocated -= node.size_of();
+                st.bytes_allocated -= size;
                 let mut tmp = None;
                 mem::swap(&mut tmp, &mut header.next);
                 mem::swap(&mut tmp, unsafe { &mut *next_node });
