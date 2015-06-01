@@ -49,15 +49,15 @@ pub trait Trace {
         }
         self._trace(UnrootTracer);
     }
-    unsafe fn _cgc_mark(&self) {
-        struct MarkTracer;
+    unsafe fn _cgc_mark(&self, mark: bool) {
+        struct MarkTracer(bool);
         impl Tracer for MarkTracer {
             #[inline(always)]
             unsafe fn traverse<T: Trace>(&self, obj: &T) {
-                obj._cgc_mark()
+                obj._cgc_mark(self.0)
             }
         }
-        self._trace(MarkTracer);
+        self._trace(MarkTracer(mark));
     }
     unsafe fn _cgc_root(&self) {
         struct RootTracer;

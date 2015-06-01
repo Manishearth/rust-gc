@@ -3,6 +3,9 @@ name = "gc"
 version = "0.0.1"
 authors = ["Manish Goregaokar <manishsmail@gmail.com>", "Michael Layzell <michael@thelayzells.com>"]
 
+[dependencies]
+lazy_static = "0.1"
+
 [dependencies.gc_plugin]
 path = "../gc_plugin"
 
