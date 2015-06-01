@@ -40,8 +40,8 @@ trait GcBoxTrait {
     /// Get a mutable reference to the internal GcBoxHeader
     fn header_mut(&mut self) -> &mut GcBoxHeader;
 
-    /// Initiate a trace through the GcBoxTrait
-    unsafe fn trace_value(&self);
+    /// Initiate a marking trace through the GcBoxTrait
+    unsafe fn mark_value(&self);
 
     /// Get the size of the allocationr required to create the GcBox
     fn size_of(&self) -> usize;
@@ -103,25 +103,25 @@ impl<T: Trace> GcBox<T> {
 
 impl<T: Trace + ?Sized> GcBox<T> {
     /// Mark this GcBox, and trace through it's data
-    pub unsafe fn trace_inner(&self) {
+    pub unsafe fn mark(&self) {
         let marked = self.header.marked.get();
         if !marked {
             self.header.marked.set(true);
-            self.data.trace();
+            self.data._gc_mark();
         }
     }
 
     /// Increase the root count on this GcBox.
     /// Roots prevent the GcBox from being destroyed by
     /// the garbage collector.
-    pub unsafe fn root_inner(&self) {
+    pub unsafe fn root(&self) {
         self.header.roots.set(self.header.roots.get() + 1);
     }
 
     /// Decrease the root count on this GcBox.
     /// Roots prevent the GcBox from being destroyed by
     /// the garbage collector.
-    pub unsafe fn unroot_inner(&self) {
+    pub unsafe fn unroot(&self) {
         self.header.roots.set(self.header.roots.get() - 1);
     }
 
@@ -140,7 +140,7 @@ impl<T: Trace> GcBoxTrait for GcBox<T> {
 
     fn header_mut(&mut self) -> &mut GcBoxHeader { &mut self.header }
 
-    unsafe fn trace_value(&self) { self.trace_inner() }
+    unsafe fn mark_value(&self) { self.mark() }
 
     fn size_of(&self) -> usize { mem::size_of::<T>() }
 }
@@ -163,7 +163,7 @@ fn collect_garbage(st: &mut GcState) {
             }
             // We trace in a different scope such that node isn't
             // mutably borrowed anymore
-            unsafe { node.trace_value(); }
+            unsafe { node.mark_value(); }
         } else { break }
     }
 

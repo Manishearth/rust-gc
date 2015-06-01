@@ -1,100 +1,144 @@
-/// The Trace trait which needs to be implemented on garbage collected objects
+pub trait Tracer {
+    unsafe fn traverse<T: Trace>(&self, obj: &T);
+}
+
+/// The Trace trait must be implemented for every garbage-collectable object
+/// Only the _trace method should be overridden, unless you are doing something
+/// super super weird.
+///
+/// This trait can be auto-derived using #[derive(Trace)] if you are using the
+/// gc_plugin compiler plugin in your program.
 pub trait Trace {
-    /// Mark all contained Gcs
-    unsafe fn trace(&self);
-    /// Increment the root-count of all contained Gcs
-    unsafe fn root(&self);
-    /// Decrement the root-count of all contained Gcs
-    unsafe fn unroot(&self);
-}
+    /// This method should be overridden for every implementer of Trace.
+    /// It is called by the default implementations of the other methods.
+    ///
+    /// tracer.traverse() should be called on every collectable element of
+    /// the object in question implementing Trace.
+    ///
+    /// Generally avoid implementing this yourself, and prefer using #[derive(Trace)]
+    /// to avoid unsafety.
+    unsafe fn _trace<T: Tracer>(&self, tracer: T);
 
-/// This simple rule implements the trace methods such with empty
-/// implementations - use this for marking types as not containing any Trace types!
-#[macro_export]
-macro_rules! empty_trace {
-    () => {
-        #[inline]
-        unsafe fn trace(&self) {}
-        #[inline]
-        unsafe fn root(&self) {}
-        #[inline]
-        unsafe fn unroot(&self) {}
+    unsafe fn _gc_mark(&self) {
+        struct MarkTracer;
+        impl Tracer for MarkTracer {
+            #[inline(always)]
+            unsafe fn traverse<T: Trace>(&self, obj: &T) {
+                obj._gc_mark()
+            }
+        }
+        self._trace(MarkTracer);
+    }
+    unsafe fn _gc_root(&self) {
+        struct RootTracer;
+        impl Tracer for RootTracer {
+            #[inline(always)]
+            unsafe fn traverse<T: Trace>(&self, obj: &T) {
+                obj._gc_root()
+            }
+        }
+        self._trace(RootTracer);
+    }
+    unsafe fn _gc_unroot(&self) {
+        struct UnrootTracer;
+        impl Tracer for UnrootTracer {
+            #[inline(always)]
+            unsafe fn traverse<T: Trace>(&self, obj: &T) {
+                obj._gc_unroot()
+            }
+        }
+        self._trace(UnrootTracer);
+    }
+    unsafe fn _cgc_mark(&self) {
+        struct MarkTracer;
+        impl Tracer for MarkTracer {
+            #[inline(always)]
+            unsafe fn traverse<T: Trace>(&self, obj: &T) {
+                obj._cgc_mark()
+            }
+        }
+        self._trace(MarkTracer);
+    }
+    unsafe fn _cgc_root(&self) {
+        struct RootTracer;
+        impl Tracer for RootTracer {
+            #[inline(always)]
+            unsafe fn traverse<T: Trace>(&self, obj: &T) {
+                obj._cgc_root()
+            }
+        }
+        self._trace(RootTracer);
+    }
+    unsafe fn _cgc_unroot(&self) {
+        struct UnrootTracer;
+        impl Tracer for UnrootTracer {
+            #[inline(always)]
+            unsafe fn traverse<T: Trace>(&self, obj: &T) {
+                obj._cgc_unroot()
+            }
+        }
+        self._trace(UnrootTracer);
     }
 }
 
-/// This rule implements the trace method. You define a this parameter name, and
-/// pass in a body, the body should call `mark` on every traceable element inside
-/// the body, and the mark implementation will automatically delegate to the correct
-/// method on the argument.
-#[macro_export]
-macro_rules! custom_trace {
-    ($this:ident, $body:expr) => {
-        #[inline]
-        unsafe fn trace(&self) {
-            #[inline]
-            unsafe fn mark<T: Trace>(it: &T) {
-                (*it).trace();
-            }
-            let $this = self;
-            $body
-        }
-        #[inline]
-        unsafe fn root(&self) {
-            #[inline]
-            unsafe fn mark<T: Trace>(it: &T) {
-                (*it).root();
-            }
-            let $this = self;
-            $body
-        }
-        #[inline]
-        unsafe fn unroot(&self) {
-            #[inline]
-            unsafe fn mark<T: Trace>(it: &T) {
-                (*it).unroot();
-            }
-            let $this = self;
-            $body
+impl<U> Trace for &'static U {
+    unsafe fn _trace<T: Tracer>(&self, _: T) {}
+}
+
+impl Trace for i8 {
+    unsafe fn _trace<T: Tracer>(&self, _: T) {}
+}
+impl Trace for u8 {
+    unsafe fn _trace<T: Tracer>(&self, _: T) {}
+}
+impl Trace for i16 {
+    unsafe fn _trace<T: Tracer>(&self, _: T) {}
+}
+impl Trace for u16 {
+    unsafe fn _trace<T: Tracer>(&self, _: T) {}
+}
+impl Trace for i32 {
+    unsafe fn _trace<T: Tracer>(&self, _: T) {}
+}
+impl Trace for u32 {
+    unsafe fn _trace<T: Tracer>(&self, _: T) {}
+}
+impl Trace for i64 {
+    unsafe fn _trace<T: Tracer>(&self, _: T) {}
+}
+impl Trace for u64 {
+    unsafe fn _trace<T: Tracer>(&self, _: T) {}
+}
+
+impl Trace for f32 {
+    unsafe fn _trace<T: Tracer>(&self, _: T) {}
+}
+impl Trace for f64 {
+    unsafe fn _trace<T: Tracer>(&self, _: T) {}
+}
+
+impl Trace for String {
+    unsafe fn _trace<T: Tracer>(&self, _: T) {}
+}
+
+impl<U: Trace> Trace for Box<U> {
+    unsafe fn _trace<T: Tracer>(&self, t: T) {
+        t.traverse(&**self);
+    }
+}
+
+impl<U: Trace> Trace for Vec<U> {
+    unsafe fn _trace<T: Tracer>(&self, t: T) {
+        for e in self {
+            t.traverse(e);
         }
     }
 }
 
-impl<T> Trace for &'static T {
-    empty_trace!();
-}
-
-impl Trace for i8  { empty_trace!(); }
-impl Trace for u8  { empty_trace!(); }
-impl Trace for i16 { empty_trace!(); }
-impl Trace for u16 { empty_trace!(); }
-impl Trace for i32 { empty_trace!(); }
-impl Trace for u32 { empty_trace!(); }
-impl Trace for i64 { empty_trace!(); }
-impl Trace for u64 { empty_trace!(); }
-
-impl Trace for f32 { empty_trace!(); }
-impl Trace for f64 { empty_trace!(); }
-
-impl Trace for String { empty_trace!(); }
-
-impl<T: Trace> Trace for Box<T> {
-    custom_trace!(this, {
-        mark(&**this);
-    });
-}
-
-impl<T: Trace> Trace for Vec<T> {
-    custom_trace!(this, {
-        for e in this {
-            mark(e);
+impl<U: Trace> Trace for Option<U> {
+    unsafe fn _trace<T: Tracer>(&self, t: T) {
+        if let Some(ref v) = *self {
+            t.traverse(v);
         }
-    });
-}
-
-impl<T: Trace> Trace for Option<T> {
-    custom_trace!(this, {
-        if let Some(ref v) = *this {
-            mark(v);
-        }
-    });
+    }
 }

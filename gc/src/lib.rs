@@ -16,7 +16,7 @@ mod trace;
 
 // We re-export the Trace method, as well as some useful internal methods for
 // managing collections or configuring the garbage collector.
-pub use trace::Trace;
+pub use trace::{Trace, Tracer};
 pub use gc::force_collect;
 
 ////////
@@ -59,7 +59,7 @@ impl<T: Trace> Gc<T> {
 
             // When we create a Gc<T>, all pointers which have been moved to the
             // heap no longer need to be rooted, so we unroot them.
-            (*ptr).value().unroot();
+            (*ptr).value()._gc_unroot();
             Gc { _ptr: ptr, root: Cell::new(true) }
         }
     }
@@ -74,31 +74,34 @@ impl<T: Trace + ?Sized> Gc<T> {
 
 impl<T: Trace + ?Sized> Trace for Gc<T> {
     #[inline]
-    unsafe fn trace(&self) {
-        self.inner().trace_inner();
+    unsafe fn _trace<U: Tracer>(&self, _: U) { /* do nothing */ }
+
+    #[inline]
+    unsafe fn _gc_mark(&self) {
+        self.inner().mark();
     }
 
     #[inline]
-    unsafe fn root(&self) {
+    unsafe fn _gc_root(&self) {
         assert!(!self.root.get(), "Can't double-root a Gc<T>");
         self.root.set(true);
 
-        self.inner().root_inner();
+        self.inner().root();
     }
 
     #[inline]
-    unsafe fn unroot(&self) {
+    unsafe fn _gc_unroot(&self) {
         assert!(self.root.get(), "Can't double-unroot a Gc<T>");
         self.root.set(false);
 
-        self.inner().unroot_inner();
+        self.inner().unroot();
     }
 }
 
 impl<T: Trace + ?Sized> Clone for Gc<T> {
     #[inline]
     fn clone(&self) -> Gc<T> {
-        unsafe { self.inner().root_inner(); }
+        unsafe { self.inner().root(); }
         Gc { _ptr: self._ptr, root: Cell::new(true) }
     }
 }
@@ -117,7 +120,7 @@ impl<T: Trace + ?Sized> Drop for Gc<T> {
     fn drop(&mut self) {
         // If this pointer was a root, we should unroot it.
         if self.root.get() {
-            unsafe { self.inner().unroot_inner(); }
+            unsafe { self.inner().unroot(); }
         }
     }
 }
@@ -180,7 +183,7 @@ impl <T: Trace + ?Sized> GcCell<T> {
 
         // Force the val_ref's contents to be rooted for the duration of the mutable borrow
         if !self.rooted.get() {
-            unsafe { val_ref.root(); }
+            unsafe { val_ref._gc_root(); }
         }
 
         GcCellRefMut {
@@ -192,32 +195,35 @@ impl <T: Trace + ?Sized> GcCell<T> {
 
 impl<T: Trace + ?Sized> Trace for GcCell<T> {
     #[inline]
-    unsafe fn trace(&self) {
+    unsafe fn _trace<U: Tracer>(&self, _: U) { /* do nothing */ }
+
+    #[inline]
+    unsafe fn _gc_mark(&self) {
         match self.cell.borrow_state() {
             BorrowState::Writing => (),
-            _ => self.cell.borrow().trace(),
+            _ => self.cell.borrow()._gc_mark(),
         }
     }
 
     #[inline]
-    unsafe fn root(&self) {
+    unsafe fn _gc_root(&self) {
         assert!(!self.rooted.get(), "Can't root a GcCell Twice!");
         self.rooted.set(true);
 
         match self.cell.borrow_state() {
             BorrowState::Writing => (),
-            _ => self.cell.borrow().root(),
+            _ => self.cell.borrow()._gc_root(),
         }
     }
 
     #[inline]
-    unsafe fn unroot(&self) {
+    unsafe fn _gc_unroot(&self) {
         assert!(self.rooted.get(), "Can't unroot a GcCell Twice!");
         self.rooted.set(false);
 
         match self.cell.borrow_state() {
             BorrowState::Writing => (),
-            _ => self.cell.borrow().unroot(),
+            _ => self.cell.borrow()._gc_unroot(),
         }
     }
 }
@@ -249,7 +255,7 @@ impl<'a, T: Trace + ?Sized> Drop for GcCellRefMut<'a, T> {
         // Restore the rooted state of the GcCell's contents to the state of the GcCell.
         // During the lifetime of the GcCellRefMut, the GcCell's contents are rooted.
         if !self._rooted.get() {
-            unsafe { self._ref.unroot(); }
+            unsafe { self._ref._gc_unroot(); }
         }
     }
 }
