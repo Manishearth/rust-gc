@@ -3,6 +3,13 @@ name = "gc_plugin"
 version = "0.0.1"
 authors = ["Manish Goregaokar <manishsmail@gmail.com>", "Michael Layzell <michael@thelayzells.com>"]
 
+description = "Garbage collector plugin for rust-gc"
+repository = "https://github.com/Manishearth/rust-gc"
+readme = "../README.md"
+license = "MPL-2.0"
+keywords = ["garbage", "plugin", "memory"]
+
+
 [lib]
 name = "gc_plugin"
 plugin = true
