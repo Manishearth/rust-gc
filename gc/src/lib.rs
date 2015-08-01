@@ -1,4 +1,4 @@
-#![feature(std_misc, optin_builtin_traits, core)]
+#![feature(optin_builtin_traits, unsize, coerce_unsized, borrow_state)]
 
 #[macro_use]
 extern crate lazy_static;
