@@ -4,7 +4,7 @@
 extern crate gc;
 
 use std::cell::Cell;
-use gc::{Trace, GcCell, Gc, force_collect};
+use gc::{Trace, GcCell, Gc, gc_force_collect};
 
 thread_local!(static COUNTER: Cell<u8> = Cell::new(0u8));
 
@@ -41,7 +41,7 @@ fn test_cycle() {
     }
 
     println!("Before collection: {:?}", COUNTER.with(|s| s.get()));
-    force_collect();
+    gc_force_collect();
     println!("After collection: {:?}", COUNTER.with(|s| s.get()));
     assert_eq!(COUNTER.with(|s| s.get()), 4);
 }
