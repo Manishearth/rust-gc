@@ -4,7 +4,7 @@
 //! It is marked as non-sendable because the garbage collection only occurs
 //! thread locally.
 
-#![feature(std_misc, optin_builtin_traits, core)]
+#![feature(optin_builtin_traits, unsize, coerce_unsized, borrow_state)]
 
 use std::cell::{self, Cell, RefCell, BorrowState};
 use std::ops::{Deref, DerefMut, CoerceUnsized};
