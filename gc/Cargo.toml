@@ -10,6 +10,6 @@ keywords = ["garbage", "plugin", "memory"]
 
 [dependencies.gc_plugin]
 path = "../gc_plugin"
-version = "0.0.1"
+version = "0.0.3"
 [dev-dependencies]
 compiletest_rs = "*"
