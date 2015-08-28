@@ -6,20 +6,18 @@ use std::cell::RefCell;
 
 thread_local!(static X: RefCell<u8> = RefCell::new(0));
 
-use gc::Trace;
+use gc::{Trace, Tracer};
 
 #[derive(Copy, Clone)]
 struct Foo;
 
 impl Trace for Foo {
-    unsafe fn trace(&self) {
+    unsafe fn _trace<T: Tracer>(&self, _: T) {
         X.with(|x| {
             let mut m = x.borrow_mut();
             *m = *m + 1;
         })
     }
-    unsafe fn root(&self){}
-    unsafe fn unroot(&self){}
 }
 
 #[derive(Trace, Copy, Clone)]
@@ -36,7 +34,7 @@ struct Baz {
 #[test]
 fn test() {
     let bar = Bar{inner: Foo};
-    unsafe { bar.trace(); }
+    unsafe { bar._gc_mark(); }
     X.with(|x| {
         assert!(*x.borrow() == 1)
     });
@@ -44,7 +42,7 @@ fn test() {
         a: bar,
         b: bar
     };
-    unsafe { baz.trace(); }
+    unsafe { baz._gc_mark(); }
     X.with(|x| {
         assert!(*x.borrow() == 3)
     });

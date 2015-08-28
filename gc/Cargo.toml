@@ -8,6 +8,9 @@ readme = "../README.md"
 license = "MPL-2.0"
 keywords = ["garbage", "plugin", "memory"]
 
+[dependencies]
+lazy_static = "0.1"
+
 [dependencies.gc_plugin]
 path = "../gc_plugin"
 version = "0.0.1"
