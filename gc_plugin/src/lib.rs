@@ -11,6 +11,7 @@ extern crate rustc;
 use rustc::plugin::Registry;
 use syntax::parse::token::intern;
 
+use syntax::attr::AttrMetaMethods;
 use syntax::ext::base::{Annotatable, ExtCtxt, MultiDecorator};
 use syntax::codemap::Span;
 use syntax::ptr::P;
@@ -82,8 +83,10 @@ fn trace_substructure(cx: &mut ExtCtxt, trait_span: Span, substr: &Substructure)
         _ => cx.span_bug(trait_span, "impossible substructure in `#[derive(Trace)]`")
     };
 
-    for &FieldInfo { ref self_, span, .. } in fields.iter() {
-        stmts.push(call_trace(span, self_.clone()));
+    for &FieldInfo { ref self_, span, attrs, .. } in fields.iter() {
+        if attrs.iter().all(|ref a| !a.check_name("ignore_trace")) {
+            stmts.push(call_trace(span, self_.clone()));
+        }
     }
 
     cx.expr_block(cx.block(trait_span, stmts, None))
