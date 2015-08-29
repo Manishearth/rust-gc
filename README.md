@@ -19,6 +19,8 @@ gc_plugin = "*"
 
 This can be used pretty much like `Rc`, with the exception of interior mutability.
 
+While this can be used pervasively, this is intended to be used only when needed, following Rust's "pay only for what you need" model. Avoid using `Gc` where `Rc` or `Box` would be equally usable.
+
 Types placed inside a `Gc` must implement `Trace`. The easiest way to do this is to use the existing plugin:
 
 ```rust
