@@ -102,3 +102,4 @@ let foo3 = Gc::new(Foo {cyclic: GcCell::new(Some(foo2.clone())), data: 3});
 
 - Destructors should not access `Gc`/`GcCell` values. We may add finalizers in the future, but we'd need to figure out a way to prevent this.
 - There needs to be a better story for cross-crate deriving, but we may have to wait for the middle IR to land to work on this.
+- The current GC is not concurrent and the GC'd objects are confined to a thread. THhere is an experimental concurrent collector [in this pull request](https://github.com/Manishearth/rust-gc/pull/6).
