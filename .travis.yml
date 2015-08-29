@@ -3,11 +3,12 @@ sudo: true
 rust: nightly
 
 script:
-- cd gc && cargo build
-- cd gc && cargo test
+- cd gc
+- cargo build
+- cargo test
 
 after_success:
-- cargo doc
+- cd gc && cargo doc
 - sudo pip install ghp-import
 - ghp-import -n target/doc
 - git push -qf https://$(TOKEN)@github.com/$(TRAVIS_REPO_SLUG).git gh-pages
