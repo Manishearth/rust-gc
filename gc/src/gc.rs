@@ -151,20 +151,18 @@ fn collect_garbage(st: &mut GcState) {
         as *mut Option<Box<GcBoxTrait + 'static>>;
 
     // Mark
-    loop {
-        if let Some(ref mut node) = *unsafe { &mut *next_node } {
-            {
-                // XXX This virtual method call is nasty :(
-                let header = node.header_mut();
-                next_node = &mut header.next as *mut _;
+    while let Some(ref mut node) = *unsafe { &mut *next_node } {
+        {
+            // XXX This virtual method call is nasty :(
+            let header = node.header_mut();
+            next_node = &mut header.next as *mut _;
 
-                // If it doesn't have roots - we can abort now
-                if header.roots.get() == 0 { continue }
-            }
-            // We trace in a different scope such that node isn't
-            // mutably borrowed anymore
-            unsafe { node.trace_value(); }
-        } else { break }
+            // If it doesn't have roots - we can abort now
+            if header.roots.get() == 0 { continue }
+        }
+        // We trace in a different scope such that node isn't
+        // mutably borrowed anymore
+        unsafe { node.trace_value(); }
     }
 
     GC_SWEEPING.with(|collecting| collecting.set(true));
@@ -173,26 +171,24 @@ fn collect_garbage(st: &mut GcState) {
         as *mut Option<Box<GcBoxTrait + 'static>>;
 
     // Sweep
-    loop {
-        if let Some(ref mut node) = *unsafe { &mut *next_node } {
-            // XXX This virtual method call is nasty :(
-            let size = node.size_of();
-            let header = node.header_mut();
+    while let Some(ref mut node) = *unsafe { &mut *next_node } {
+        // XXX This virtual method call is nasty :(
+        let size = node.size_of();
+        let header = node.header_mut();
 
-            if header.marked.get() {
-                // This node has already been marked - we're done!
-                header.marked.set(false);
-                next_node = &mut header.next;
-            } else {
-                // The node wasn't marked - we need to delete it
-                st.bytes_allocated -= size;
-                let mut tmp = None;
-                mem::swap(&mut tmp, &mut header.next);
-                mem::swap(&mut tmp, unsafe { &mut *next_node });
+        if header.marked.get() {
+            // This node has already been marked - we're done!
+            header.marked.set(false);
+            next_node = &mut header.next;
+        } else {
+            // The node wasn't marked - we need to delete it
+            st.bytes_allocated -= size;
+            let mut tmp = None;
+            mem::swap(&mut tmp, &mut header.next);
+            mem::swap(&mut tmp, unsafe { &mut *next_node });
 
-                // At this point, the node is destroyed if it exists due to tmp dropping
-            }
-        } else { break }
+            // At this point, the node is destroyed if it exists due to tmp dropping
+        }
     }
 
     // Update the end pointer to point to the correct location
