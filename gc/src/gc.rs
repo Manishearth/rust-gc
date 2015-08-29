@@ -8,8 +8,8 @@ const GC_THRESHOLD: usize = 100;
 
 struct GcState {
     bytes_allocated: usize,
-    boxes_start: Option<Box<GcBoxTrait + 'static>>,
-    boxes_end: *mut Option<Box<GcBoxTrait + 'static>>,
+    boxes_start: Option<Box<GcBox<Trace + 'static>>>,
+    boxes_end: *mut Option<Box<GcBox<Trace + 'static>>>,
 }
 
 /// Whether or not the thread is currently in the sweep phase of garbage collection
@@ -27,24 +27,8 @@ pub struct GcBoxHeader {
     // XXX This is horribly space inefficient - not sure if we care
     // We are using a word word bool - there is a full 63 bits of unused data :(
     roots: Cell<usize>,
-    next: Option<Box<GcBoxTrait + 'static>>,
+    next: Option<Box<GcBox<Trace + 'static>>>,
     marked: Cell<bool>,
-}
-
-/// Internal trait - must be implemented by every garbage collected allocation
-/// GcBoxTraits form a linked list of allocations.
-trait GcBoxTrait {
-    /// Get a reference to the internal GcBoxHeader
-    fn header(&self) -> &GcBoxHeader;
-
-    /// Get a mutable reference to the internal GcBoxHeader
-    fn header_mut(&mut self) -> &mut GcBoxHeader;
-
-    /// Initiate a trace through the GcBoxTrait
-    unsafe fn trace_value(&self);
-
-    /// Get the size of the allocationr required to create the GcBox
-    fn size_of(&self) -> usize;
 }
 
 pub struct GcBox<T: Trace + ?Sized + 'static> {
@@ -133,28 +117,22 @@ impl<T: Trace + ?Sized> GcBox<T> {
                                             "Gc pointers may be invalid when GC is running"));
         &self.data
     }
-}
 
-impl<T: Trace> GcBoxTrait for GcBox<T> {
-    fn header(&self) -> &GcBoxHeader { &self.header }
-
-    fn header_mut(&mut self) -> &mut GcBoxHeader { &mut self.header }
-
-    unsafe fn trace_value(&self) { self.trace_inner() }
-
-    fn size_of(&self) -> usize { mem::size_of::<T>() }
+    fn header_mut(&mut self) -> &mut GcBoxHeader {
+        &mut self.header
+    }
+    fn size_of(&self) -> usize { mem::size_of_val(self) }
 }
 
 /// Collect some garbage!
 fn collect_garbage(st: &mut GcState) {
     let mut next_node = &mut st.boxes_start
-        as *mut Option<Box<GcBoxTrait + 'static>>;
+        as *mut Option<Box<GcBox<Trace + 'static>>>;
 
     // Mark
     loop {
         if let Some(ref mut node) = *unsafe { &mut *next_node } {
             {
-                // XXX This virtual method call is nasty :(
                 let header = node.header_mut();
                 next_node = &mut header.next as *mut _;
 
@@ -163,19 +141,18 @@ fn collect_garbage(st: &mut GcState) {
             }
             // We trace in a different scope such that node isn't
             // mutably borrowed anymore
-            unsafe { node.trace_value(); }
+            unsafe { node.trace_inner(); }
         } else { break }
     }
 
     GC_SWEEPING.with(|collecting| collecting.set(true));
 
     let mut next_node = &mut st.boxes_start
-        as *mut Option<Box<GcBoxTrait + 'static>>;
+        as *mut Option<Box<GcBox<Trace + 'static>>>;
 
     // Sweep
     loop {
         if let Some(ref mut node) = *unsafe { &mut *next_node } {
-            // XXX This virtual method call is nasty :(
             let size = node.size_of();
             let header = node.header_mut();
 
