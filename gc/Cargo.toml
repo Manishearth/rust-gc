@@ -1,6 +1,6 @@
 [package]
 name = "gc"
-version = "0.0.3"
+version = "0.0.4"
 authors = ["Manish Goregaokar <manishsmail@gmail.com>", "Michael Layzell <michael@thelayzells.com>"]
 description = "Tracing garbage collector plugin for Rust. Not ready for use yet, please see README"
 repository = "https://github.com/Manishearth/rust-gc"
@@ -10,6 +10,6 @@ keywords = ["garbage", "plugin", "memory"]
 
 [dependencies.gc_plugin]
 path = "../gc_plugin"
-version = "0.0.3"
+version = "0.0.4"
 [dev-dependencies]
 compiletest_rs = "*"

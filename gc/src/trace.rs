@@ -11,7 +11,7 @@ pub trait Trace {
 /// This simple rule implements the trace methods such with empty
 /// implementations - use this for marking types as not containing any Trace types!
 #[macro_export]
-macro_rules! empty_trace {
+macro_rules! unsafe_empty_trace {
     () => {
         #[inline]
         unsafe fn trace(&self) {}
@@ -60,22 +60,22 @@ macro_rules! custom_trace {
 }
 
 impl<T> Trace for &'static T {
-    empty_trace!();
+    unsafe_empty_trace!();
 }
 
-impl Trace for i8  { empty_trace!(); }
-impl Trace for u8  { empty_trace!(); }
-impl Trace for i16 { empty_trace!(); }
-impl Trace for u16 { empty_trace!(); }
-impl Trace for i32 { empty_trace!(); }
-impl Trace for u32 { empty_trace!(); }
-impl Trace for i64 { empty_trace!(); }
-impl Trace for u64 { empty_trace!(); }
+impl Trace for i8  { unsafe_empty_trace!(); }
+impl Trace for u8  { unsafe_empty_trace!(); }
+impl Trace for i16 { unsafe_empty_trace!(); }
+impl Trace for u16 { unsafe_empty_trace!(); }
+impl Trace for i32 { unsafe_empty_trace!(); }
+impl Trace for u32 { unsafe_empty_trace!(); }
+impl Trace for i64 { unsafe_empty_trace!(); }
+impl Trace for u64 { unsafe_empty_trace!(); }
 
-impl Trace for f32 { empty_trace!(); }
-impl Trace for f64 { empty_trace!(); }
+impl Trace for f32 { unsafe_empty_trace!(); }
+impl Trace for f64 { unsafe_empty_trace!(); }
 
-impl Trace for String { empty_trace!(); }
+impl Trace for String { unsafe_empty_trace!(); }
 
 impl<T: Trace> Trace for Box<T> {
     custom_trace!(this, {

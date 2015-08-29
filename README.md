@@ -39,9 +39,9 @@ struct Foo {
 // now, `Gc<Foo>` may be used
 ```
 
-For types defined in the stdlib, please file an issue on this repository (use the `ignore_trace` method shown below to make things work in the meantime).
+For types defined in the stdlib, please file an issue on this repository (use the `unsafe_ignore_trace` method shown below to make things work in the meantime).
 
-Note that `Trace` is only needed for types which transitively contain a `Gc`, if you are sure that this isn't the case, you may use the `empty_trace!` macro on your types. Alternatively, use the `#[ignore_trace]` annotation on the struct field.
+Note that `Trace` is only needed for types which transitively contain a `Gc`, if you are sure that this isn't the case, you may use the `unsafe_empty_trace!` macro on your types. Alternatively, use the `#[unsafe_ignore_trace]` annotation on the struct field. Incorrect usage of `unsafe_empty_trace` and `unsafe_ignore_trace` may lead to unsafety.
 
 ```rust
 #![feature(plugin, custom_derive, custom_attribute)]
@@ -57,13 +57,11 @@ use bar::Baz;
 #[derive(Trace)]
 struct Foo {
   x: Gc<Foo>,
-  #[ignore_trace]
+  #[unsafe_ignore_trace]
   y: Baz, // we are assuming that `Baz` doesn't contain any `Gc` objects
   // ...
 }
 ```
-
-Note that incorrect usage of `empty_trace` and `ignore_trace` may lead to unsafety (I may add `unsafe_` prefixes to them).
 
 To use `Gc`, simply call `Gc::new`:
 
@@ -100,5 +98,5 @@ let foo3 = Gc::new(Foo {cyclic: GcCell::new(Some(foo2.clone())), data: 3});
 
 ## Known issues
 
-- Bypassing tracing with `empty_trace` and `ignore_trace` is unsafe
+- Bypassing tracing with `unsafe_empty_trace` and `unsafe_ignore_trace` is unsafe
 - Destructors should not access `Gc`/`GcCell` values. We may add finalizers in the future, but we'd need to figure out a way to prevent this.

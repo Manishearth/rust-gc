@@ -84,7 +84,7 @@ fn trace_substructure(cx: &mut ExtCtxt, trait_span: Span, substr: &Substructure)
     };
 
     for &FieldInfo { ref self_, span, attrs, .. } in fields.iter() {
-        if attrs.iter().all(|ref a| !a.check_name("ignore_trace")) {
+        if attrs.iter().all(|ref a| !a.check_name("unsafe_ignore_trace")) {
             stmts.push(call_trace(span, self_.clone()));
         }
     }
