@@ -3,13 +3,19 @@ use std::mem;
 use std::cell::{Cell, RefCell};
 use trace::Trace;
 
-// XXX Obviously not 100 bytes GC threshold - choose a number
-const GC_THRESHOLD: usize = 100;
+const INITIAL_THRESHOLD: usize = 100;
+
+// after collection we want the the ratio of used/total to be no
+// greater than this (the threshold grows exponentially, to avoid
+// quadratic behavior when the heap is growing linearly with the
+// number of `new` calls):
+const USED_SPACE_RATIO: f64 = 0.7;
 
 struct GcState {
     bytes_allocated: usize,
-    boxes_start: Option<Box<GcBoxTrait + 'static>>,
-    boxes_end: *mut Option<Box<GcBoxTrait + 'static>>,
+    threshold: usize,
+    boxes_start: Option<Box<GcBox<Trace + 'static>>>,
+    boxes_end: *mut Option<Box<GcBox<Trace + 'static>>>,
 }
 
 /// Whether or not the thread is currently in the sweep phase of garbage collection
@@ -19,6 +25,7 @@ thread_local!(static GC_SWEEPING: Cell<bool> = Cell::new(false));
 /// The garbage collector's internal state.
 thread_local!(static GC_STATE: RefCell<GcState> = RefCell::new(GcState {
     bytes_allocated: 0,
+    threshold: INITIAL_THRESHOLD,
     boxes_start: None,
     boxes_end: ptr::null_mut(),
 }));
@@ -27,24 +34,8 @@ pub struct GcBoxHeader {
     // XXX This is horribly space inefficient - not sure if we care
     // We are using a word word bool - there is a full 63 bits of unused data :(
     roots: Cell<usize>,
-    next: Option<Box<GcBoxTrait + 'static>>,
+    next: Option<Box<GcBox<Trace + 'static>>>,
     marked: Cell<bool>,
-}
-
-/// Internal trait - must be implemented by every garbage collected allocation
-/// GcBoxTraits form a linked list of allocations.
-trait GcBoxTrait {
-    /// Get a reference to the internal GcBoxHeader
-    fn header(&self) -> &GcBoxHeader;
-
-    /// Get a mutable reference to the internal GcBoxHeader
-    fn header_mut(&mut self) -> &mut GcBoxHeader;
-
-    /// Initiate a trace through the GcBoxTrait
-    unsafe fn trace_value(&self);
-
-    /// Get the size of the allocationr required to create the GcBox
-    fn size_of(&self) -> usize;
 }
 
 pub struct GcBox<T: Trace + ?Sized + 'static> {
@@ -63,8 +54,15 @@ impl<T: Trace> GcBox<T> {
             let mut st = _st.borrow_mut();
 
             // XXX We should probably be more clever about collecting
-            if st.bytes_allocated > GC_THRESHOLD {
+            if st.bytes_allocated > st.threshold {
                 collect_garbage(&mut *st);
+
+                if st.bytes_allocated as f64 > st.threshold as f64 * USED_SPACE_RATIO  {
+                    // we didn't collect enough, so increase the
+                    // threshold for next time, to avoid thrashing the
+                    // collector too much/behaving quadratically.
+                    st.threshold = (st.bytes_allocated as f64 / USED_SPACE_RATIO) as usize
+                }
             }
 
             let mut gcbox = Box::new(GcBox {
@@ -133,66 +131,55 @@ impl<T: Trace + ?Sized> GcBox<T> {
                                             "Gc pointers may be invalid when GC is running"));
         &self.data
     }
-}
 
-impl<T: Trace> GcBoxTrait for GcBox<T> {
-    fn header(&self) -> &GcBoxHeader { &self.header }
-
-    fn header_mut(&mut self) -> &mut GcBoxHeader { &mut self.header }
-
-    unsafe fn trace_value(&self) { self.trace_inner() }
-
-    fn size_of(&self) -> usize { mem::size_of::<T>() }
+    fn header_mut(&mut self) -> &mut GcBoxHeader {
+        &mut self.header
+    }
+    fn size_of(&self) -> usize { mem::size_of_val(self) }
 }
 
 /// Collect some garbage!
 fn collect_garbage(st: &mut GcState) {
     let mut next_node = &mut st.boxes_start
-        as *mut Option<Box<GcBoxTrait + 'static>>;
+        as *mut Option<Box<GcBox<Trace + 'static>>>;
 
     // Mark
-    loop {
-        if let Some(ref mut node) = *unsafe { &mut *next_node } {
-            {
-                // XXX This virtual method call is nasty :(
-                let header = node.header_mut();
-                next_node = &mut header.next as *mut _;
+    while let Some(ref mut node) = *unsafe { &mut *next_node } {
+        {
+            let header = node.header_mut();
+            next_node = &mut header.next as *mut _;
 
-                // If it doesn't have roots - we can abort now
-                if header.roots.get() == 0 { continue }
-            }
-            // We trace in a different scope such that node isn't
-            // mutably borrowed anymore
-            unsafe { node.trace_value(); }
-        } else { break }
+            // If it doesn't have roots - we can abort now
+            if header.roots.get() == 0 { continue }
+        }
+        // We trace in a different scope such that node isn't
+        // mutably borrowed anymore
+        unsafe { node.trace_inner(); }
     }
 
     GC_SWEEPING.with(|collecting| collecting.set(true));
 
     let mut next_node = &mut st.boxes_start
-        as *mut Option<Box<GcBoxTrait + 'static>>;
+        as *mut Option<Box<GcBox<Trace + 'static>>>;
 
     // Sweep
-    loop {
-        if let Some(ref mut node) = *unsafe { &mut *next_node } {
-            // XXX This virtual method call is nasty :(
-            let size = node.size_of();
-            let header = node.header_mut();
+    while let Some(ref mut node) = *unsafe { &mut *next_node } {
+        let size = node.size_of();
+        let header = node.header_mut();
 
-            if header.marked.get() {
-                // This node has already been marked - we're done!
-                header.marked.set(false);
-                next_node = &mut header.next;
-            } else {
-                // The node wasn't marked - we need to delete it
-                st.bytes_allocated -= size;
-                let mut tmp = None;
-                mem::swap(&mut tmp, &mut header.next);
-                mem::swap(&mut tmp, unsafe { &mut *next_node });
+        if header.marked.get() {
+            // This node has already been marked - we're done!
+            header.marked.set(false);
+            next_node = &mut header.next;
+        } else {
+            // The node wasn't marked - we need to delete it
+            st.bytes_allocated -= size;
+            let mut tmp = None;
+            mem::swap(&mut tmp, &mut header.next);
+            mem::swap(&mut tmp, unsafe { &mut *next_node });
 
-                // At this point, the node is destroyed if it exists due to tmp dropping
-            }
-        } else { break }
+            // At this point, the node is destroyed if it exists due to tmp dropping
+        }
     }
 
     // Update the end pointer to point to the correct location
