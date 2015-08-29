@@ -3,11 +3,17 @@ use std::mem;
 use std::cell::{Cell, RefCell};
 use trace::Trace;
 
-// XXX Obviously not 100 bytes GC threshold - choose a number
-const GC_THRESHOLD: usize = 100;
+const INITIAL_THRESHOLD: usize = 100;
+
+// after collection we want the the ratio of used/total to be no
+// greater than this (the threshold grows exponentially, to avoid
+// quadratic behavior when the heap is growing linearly with the
+// number of `new` calls):
+const USED_SPACE_RATIO: f64 = 0.7;
 
 struct GcState {
     bytes_allocated: usize,
+    threshold: usize,
     boxes_start: Option<Box<GcBox<Trace + 'static>>>,
     boxes_end: *mut Option<Box<GcBox<Trace + 'static>>>,
 }
@@ -19,6 +25,7 @@ thread_local!(static GC_SWEEPING: Cell<bool> = Cell::new(false));
 /// The garbage collector's internal state.
 thread_local!(static GC_STATE: RefCell<GcState> = RefCell::new(GcState {
     bytes_allocated: 0,
+    threshold: INITIAL_THRESHOLD,
     boxes_start: None,
     boxes_end: ptr::null_mut(),
 }));
@@ -47,8 +54,15 @@ impl<T: Trace> GcBox<T> {
             let mut st = _st.borrow_mut();
 
             // XXX We should probably be more clever about collecting
-            if st.bytes_allocated > GC_THRESHOLD {
+            if st.bytes_allocated > st.threshold {
                 collect_garbage(&mut *st);
+
+                if st.bytes_allocated as f64 > st.threshold as f64 * USED_SPACE_RATIO  {
+                    // we didn't collect enough, so increase the
+                    // threshold for next time, to avoid thrashing the
+                    // collector too much/behaving quadratically.
+                    st.threshold = (st.bytes_allocated as f64 / USED_SPACE_RATIO) as usize
+                }
             }
 
             let mut gcbox = Box::new(GcBox {
