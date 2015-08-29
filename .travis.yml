@@ -5,7 +5,7 @@ script:
 - cd gc
 - cargo build
 - cargo test
-after_success: bash upload-docs.sh
+after_success: bash ../upload-docs.sh
 env:
   global:
     secure: A6xVz2V7q0ylvnU6/ojCsA/p5ha6p7Ofvc1vQIXOf3wKsdkn+PB6s/vDUwQPzFkJzksp0yyNZd4qHT/ERk3NOycatl0W+beo5VpH++zU3omfxUb5+yg09lnymN6kX93bkI4LK9UKp7u1iYafrOwpvevKqNVEiZbdYL/fK+SLjiqBBa7qTdoDeKddn0JJdG/bsVvHrcNTLz4uv1sf6DTvllY36E6Xi9bacNySUa+obfmFgtxT5ynbDl96EVpm0yV3LXVNJjMdmDggJN408TYLTuuuBTPNPfE3A9FL/BkboXlZDSKCeKki5pI4asVBcOOQONE7WKGkX9heizv/RSmyDzwyUdxDjuXyTYRFSRTsQy4J9RJOohtsccCyS/FvjTqv0KKi4UUSojuO2kMsF6UIMmuXGhQ2ym2MaxldsVFf/grzQGLnBeKztXCK78QluRyr8M8x9KKmRzpJb5YuWoN3TctZZ0VgPthrI5JjOrEfsBcVQZWbyqx4F/8LnSulBKfEy3LZxaPmXMfcVxMP69cXPs1VmJW3ZR3CLkCCc53fy7CWiqSemMMHp3nSFcA5qZK4BLo1PSijmGLkZ53YnOtn/FoA1mM/DdcPAFh/McIrYex/YxSdE1PlS+1nkdzujLmGv0IfQsopOS4+2ywtWoLV6QmgR9yqomfDpbhMSim887g=
