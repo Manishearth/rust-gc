@@ -98,5 +98,5 @@ let foo3 = Gc::new(Foo {cyclic: GcCell::new(Some(foo2.clone())), data: 3});
 
 ## Known issues
 
-- Bypassing tracing with `unsafe_empty_trace` and `unsafe_ignore_trace` is unsafe
 - Destructors should not access `Gc`/`GcCell` values. We may add finalizers in the future, but we'd need to figure out a way to prevent this.
+- There needs to be a better story for cross-crate deriving, but we may have to wait for the middle IR to land to work on this.
