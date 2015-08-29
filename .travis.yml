@@ -1,8 +1,17 @@
 language: rust
-sudo: false
+sudo: true
 rust: nightly
 
-
 script:
- - cd gc && cargo build
- - cd gc && cargo test
+- cd gc && cargo build
+- cd gc && cargo test
+
+after_success:
+- cargo doc
+- sudo pip install ghp-import
+- ghp-import -n target/doc
+- git push -qf https://$(TOKEN)@github.com/$(TRAVIS_REPO_SLUG).git gh-pages
+
+env:
+  global:
+    secure: MJpWqyT5Htzya4zIRWigq8C7l3pwv8C4SizSYaaUA95EaQrCv2Ri0vICKCSoCZ45IRR4y6UIKbrRpxCGgr6WC/vXWQMeK28KmWkGvL1dFmaqgs9SRlO6PqC+S5d0uOB168rIv4sNFCY6d6wpTcDiQtvwRiFB9MveFmwkUPVtXdUKOH0gtiEp8LMUiHGrJ5/QgeleGz2sDV64x2zP65A7s2hF6TBdmzhLZCKNk1rP/jrWwfj7phxIDqLTfuNvbX8CTUgyvnG7MHfn49hYVTjF9E5Np8cEJJXwdIB/pBYBtbCJy+3jXS1gagJjzTT1Z861MMVo0TZO9U319pWisoluj9dR1f5jSGJmIImDkSNMIe3jyrkzHoWDGdM0W9TI8RtelysIFbfGXWX87vXVtNCjVNOEJzQr4/9awblXas3l1QeSwaKgbn26lgYChC+duwr/fN4y3LCsJVKJOwHPEd5RNB1WjaeoRTJWblVu8LR/5eh5QouRiHSbuCX+e03nbAQ3tkk99oMbYtg/+7w4L4oCkegmp5dSZKSWuaa9PxjDPpUampbufyYxloGqfZZqhaHsxS8vQ0/GYU0Vh/W2fqfWikREkptz2UH0nZmWGvICxtAWFi2yekuPP27DBVW8r5AxT7zodBUwBBQlXfNmo+bEqS6b9wIkdE8/7YsX1/z35lg=
