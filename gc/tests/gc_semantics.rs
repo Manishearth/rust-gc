@@ -48,7 +48,7 @@ impl Drop for GcWatch {
     }
 }
 
-impl Trace for GcWatch {
+unsafe impl Trace for GcWatch {
     unsafe fn trace(&self) {
         self.0.with(|f| {
             let mut of = f.get();

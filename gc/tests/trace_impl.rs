@@ -11,7 +11,7 @@ use gc::Trace;
 #[derive(Copy, Clone)]
 struct Foo;
 
-impl Trace for Foo {
+unsafe impl Trace for Foo {
     unsafe fn trace(&self) {
         X.with(|x| {
             let mut m = x.borrow_mut();

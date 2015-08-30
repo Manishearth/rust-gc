@@ -1,5 +1,5 @@
 /// The Trace trait which needs to be implemented on garbage collected objects
-pub trait Trace {
+pub unsafe trait Trace {
     /// Mark all contained Gcs
     unsafe fn trace(&self);
     /// Increment the root-count of all contained Gcs
@@ -59,31 +59,31 @@ macro_rules! custom_trace {
     }
 }
 
-impl<T> Trace for &'static T {
+unsafe impl<T> Trace for &'static T {
     unsafe_empty_trace!();
 }
 
-impl Trace for i8  { unsafe_empty_trace!(); }
-impl Trace for u8  { unsafe_empty_trace!(); }
-impl Trace for i16 { unsafe_empty_trace!(); }
-impl Trace for u16 { unsafe_empty_trace!(); }
-impl Trace for i32 { unsafe_empty_trace!(); }
-impl Trace for u32 { unsafe_empty_trace!(); }
-impl Trace for i64 { unsafe_empty_trace!(); }
-impl Trace for u64 { unsafe_empty_trace!(); }
+unsafe impl Trace for i8  { unsafe_empty_trace!(); }
+unsafe impl Trace for u8  { unsafe_empty_trace!(); }
+unsafe impl Trace for i16 { unsafe_empty_trace!(); }
+unsafe impl Trace for u16 { unsafe_empty_trace!(); }
+unsafe impl Trace for i32 { unsafe_empty_trace!(); }
+unsafe impl Trace for u32 { unsafe_empty_trace!(); }
+unsafe impl Trace for i64 { unsafe_empty_trace!(); }
+unsafe impl Trace for u64 { unsafe_empty_trace!(); }
 
-impl Trace for f32 { unsafe_empty_trace!(); }
-impl Trace for f64 { unsafe_empty_trace!(); }
+unsafe impl Trace for f32 { unsafe_empty_trace!(); }
+unsafe impl Trace for f64 { unsafe_empty_trace!(); }
 
-impl Trace for String { unsafe_empty_trace!(); }
+unsafe impl Trace for String { unsafe_empty_trace!(); }
 
-impl<T: Trace> Trace for Box<T> {
+unsafe impl<T: Trace> Trace for Box<T> {
     custom_trace!(this, {
         mark(&**this);
     });
 }
 
-impl<T: Trace> Trace for Vec<T> {
+unsafe impl<T: Trace> Trace for Vec<T> {
     custom_trace!(this, {
         for e in this {
             mark(e);
@@ -91,7 +91,7 @@ impl<T: Trace> Trace for Vec<T> {
     });
 }
 
-impl<T: Trace> Trace for Option<T> {
+unsafe impl<T: Trace> Trace for Option<T> {
     custom_trace!(this, {
         if let Some(ref v) = *this {
             mark(v);

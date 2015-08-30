@@ -72,7 +72,7 @@ impl<T: Trace + ?Sized> Gc<T> {
     }
 }
 
-impl<T: Trace + ?Sized> Trace for Gc<T> {
+unsafe impl<T: Trace + ?Sized> Trace for Gc<T> {
     #[inline]
     unsafe fn trace(&self) {
         self.inner().trace_inner();
@@ -190,7 +190,7 @@ impl <T: Trace + ?Sized> GcCell<T> {
     }
 }
 
-impl<T: Trace + ?Sized> Trace for GcCell<T> {
+unsafe impl<T: Trace + ?Sized> Trace for GcCell<T> {
     #[inline]
     unsafe fn trace(&self) {
         match self.cell.borrow_state() {

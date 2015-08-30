@@ -65,6 +65,7 @@ pub fn expand_trace(cx: &mut ExtCtxt, span: Span, mitem: &MetaItem, item: &Annot
             }
         ],
         associated_types: vec![],
+        is_unsafe: true,
     };
     trait_def.expand(cx, mitem, item, push)
 }
