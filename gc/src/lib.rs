@@ -4,12 +4,15 @@
 //! It is marked as non-sendable because the garbage collection only occurs
 //! thread locally.
 
-#![feature(optin_builtin_traits, unsize, coerce_unsized, borrow_state)]
+#![feature(borrow_state, coerce_unsized, core, optin_builtin_traits, nonzero, unsize)]
 
+extern crate core;
+
+use core::nonzero::NonZero;
+use gc::GcBox;
 use std::cell::{self, Cell, RefCell, BorrowState};
 use std::ops::{Deref, DerefMut, CoerceUnsized};
 use std::marker;
-use gc::GcBox;
 
 mod gc;
 mod trace;
@@ -29,7 +32,7 @@ pub use gc::force_collect;
 pub struct Gc<T: Trace + ?Sized + 'static> {
     // XXX We can probably take advantage of alignment to store this
     root: Cell<bool>,
-    _ptr: *mut GcBox<T>,
+    _ptr: NonZero<*mut GcBox<T>>,
 }
 
 impl<T: ?Sized> !marker::Send for Gc<T> {}
@@ -59,7 +62,7 @@ impl<T: Trace> Gc<T> {
 
             // When we create a Gc<T>, all pointers which have been moved to the
             // heap no longer need to be rooted, so we unroot them.
-            (*ptr).value().unroot();
+            (**ptr).value().unroot();
             Gc { _ptr: ptr, root: Cell::new(true) }
         }
     }
@@ -68,7 +71,7 @@ impl<T: Trace> Gc<T> {
 impl<T: Trace + ?Sized> Gc<T> {
     #[inline]
     fn inner(&self) -> &GcBox<T> {
-        unsafe { &*self._ptr }
+        unsafe { &**self._ptr }
     }
 }
 
