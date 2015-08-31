@@ -1,5 +1,5 @@
 # rust-gc
-
+[![Build Status](https://travis-ci.org/Manishearth/rust-gc.svg?branch=master)](https://travis-ci.org/Manishearth/rust-gc)
 
 Simple tracing (mark and sweep) garbage collector for Rust
 
