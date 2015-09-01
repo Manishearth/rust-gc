@@ -5,7 +5,7 @@ Simple tracing (mark and sweep) garbage collector for Rust
 
 Works, but still under construction.
 
-Basic design: https://gist.github.com/mystor/fa1141bfb30643289597
+The design and motivation is illustrated in [this blog post](http://manishearth.github.io/blog/2015/09/01/designing-a-gc-in-rust/), with a sketch of the code [in this gist](https://gist.github.com/mystor/fa1141bfb30643289597).
 
 ## Use
 
