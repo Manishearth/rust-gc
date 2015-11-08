@@ -4,14 +4,14 @@
 //! It is marked as non-sendable because the garbage collection only occurs
 //! thread locally.
 
-#![feature(borrow_state, coerce_unsized, core, optin_builtin_traits, nonzero, unsize)]
+#![feature(borrow_state, core, optin_builtin_traits, nonzero)]
 
 extern crate core;
 
 use core::nonzero::NonZero;
 use gc::GcBox;
-use std::cell::{self, Cell, RefCell, BorrowState};
-use std::ops::{Deref, DerefMut, CoerceUnsized};
+use std::cell::{self, Cell, RefCell, BorrowState, UnsafeCell};
+use std::ops::{Deref, DerefMut};
 use std::marker;
 
 mod gc;
@@ -32,14 +32,12 @@ const EVERYTHING_BUT_LEAST_SIGNIFICANT_BIT: usize = ::std::usize::MAX - 1;
 ///
 /// See the [module level documentation](./) for more details.
 pub struct Gc<T: Trace + ?Sized + 'static> {
-    _ptr: NonZero<*mut GcBox<T>>,
+    _ptr: UnsafeCell<NonZero<*mut GcBox<T>>>,
 }
 
 impl<T: ?Sized> !marker::Send for Gc<T> {}
 
 impl<T: ?Sized> !marker::Sync for Gc<T> {}
-
-impl<T: Trace + ?Sized + marker::Unsize<U>, U: Trace + ?Sized> CoerceUnsized<Gc<U>> for Gc<T> {}
 
 impl<T: Trace> Gc<T> {
     /// Constructs a new `Gc<T>`.
@@ -63,7 +61,7 @@ impl<T: Trace> Gc<T> {
             // When we create a Gc<T>, all pointers which have been moved to the
             // heap no longer need to be rooted, so we unroot them.
             (**ptr).value().unroot();
-            let gc = Gc { _ptr: ptr };
+            let gc = Gc { _ptr: UnsafeCell::new(ptr) };
             gc.set_rooted(true);
             gc
         }
@@ -75,7 +73,7 @@ impl<T: Trace + ?Sized> Gc<T> {
     fn inner(&self) -> &GcBox<T> {
         use std::mem::transmute;
         unsafe {
-            let gc_box: *mut GcBox<_> = *self._ptr;
+            let gc_box: *mut GcBox<_> = **self._ptr.get();
             let ptrs: *mut usize = transmute(&gc_box);
             *ptrs &= EVERYTHING_BUT_LEAST_SIGNIFICANT_BIT;
             transmute::<*mut GcBox<_>, &mut GcBox<_>>(gc_box)
@@ -85,7 +83,7 @@ impl<T: Trace + ?Sized> Gc<T> {
     fn is_rooted(&self) -> bool {
         use std::mem::transmute;
         unsafe {
-            let gc_box: &*mut GcBox<T> = &*self._ptr;
+            let gc_box: &*mut GcBox<T> = &**self._ptr.get();
             // Address of gc_box on the stack.
             let ptrs: *mut usize = transmute::<&*mut _, _>(gc_box);
             *ptrs & 1 == 1
@@ -96,7 +94,7 @@ impl<T: Trace + ?Sized> Gc<T> {
     fn set_rooted(&self, b: bool) {
         use std::mem::transmute;
         unsafe {
-            let gc_box: &*mut GcBox<T> = &*self._ptr;
+            let gc_box: &*mut GcBox<T> = &**self._ptr.get();
             // Address of gc_box on the stack.
             let ptrs: *mut usize = transmute::<&*mut _, _>(gc_box);
 
@@ -135,7 +133,9 @@ impl<T: Trace + ?Sized> Clone for Gc<T> {
     #[inline]
     fn clone(&self) -> Gc<T> {
         unsafe { self.inner().root_inner(); }
-        let gc = Gc { _ptr: self._ptr };
+        let gc = unsafe {
+            Gc { _ptr: UnsafeCell::new(*self._ptr.get())}
+        };
         gc.set_rooted(true);
         gc
     }
