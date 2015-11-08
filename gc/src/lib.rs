@@ -22,6 +22,8 @@ mod trace;
 pub use trace::Trace;
 pub use gc::force_collect;
 
+const EVERYTHING_BUT_LEAST_SIGNIFICANT_BIT: usize = ::std::usize::MAX - 1;
+
 ////////
 // Gc //
 ////////
@@ -30,8 +32,6 @@ pub use gc::force_collect;
 ///
 /// See the [module level documentation](./) for more details.
 pub struct Gc<T: Trace + ?Sized + 'static> {
-    // XXX We can probably take advantage of alignment to store this
-    root: Cell<bool>,
     _ptr: NonZero<*mut GcBox<T>>,
 }
 
@@ -63,7 +63,9 @@ impl<T: Trace> Gc<T> {
             // When we create a Gc<T>, all pointers which have been moved to the
             // heap no longer need to be rooted, so we unroot them.
             (**ptr).value().unroot();
-            Gc { _ptr: ptr, root: Cell::new(true) }
+            let gc = Gc { _ptr: ptr };
+            gc.set_rooted(true);
+            gc
         }
     }
 }
@@ -71,7 +73,38 @@ impl<T: Trace> Gc<T> {
 impl<T: Trace + ?Sized> Gc<T> {
     #[inline]
     fn inner(&self) -> &GcBox<T> {
-        unsafe { &**self._ptr }
+        use std::mem::transmute;
+        unsafe {
+            let gc_box: *mut GcBox<_> = *self._ptr;
+            let ptrs: *mut usize = transmute(&gc_box);
+            *ptrs &= EVERYTHING_BUT_LEAST_SIGNIFICANT_BIT;
+            transmute::<*mut GcBox<_>, &mut GcBox<_>>(gc_box)
+        }
+    }
+
+    fn is_rooted(&self) -> bool {
+        use std::mem::transmute;
+        unsafe {
+            let gc_box: &*mut GcBox<T> = &*self._ptr;
+            // Address of gc_box on the stack.
+            let ptrs: *mut usize = transmute::<&*mut _, _>(gc_box);
+            *ptrs & 1 == 1
+        }
+    }
+
+    #[allow(mutable_transmutes)]
+    fn set_rooted(&self, b: bool) {
+        use std::mem::transmute;
+        unsafe {
+            let gc_box: &*mut GcBox<T> = &*self._ptr;
+            // Address of gc_box on the stack.
+            let ptrs: *mut usize = transmute::<&*mut _, _>(gc_box);
+
+            // Clear out the bottom bit
+            *ptrs = *ptrs & EVERYTHING_BUT_LEAST_SIGNIFICANT_BIT;
+            // Set the bottom bit
+            *ptrs = *ptrs | if b { 1 } else { 0 };
+        }
     }
 }
 
@@ -83,16 +116,16 @@ unsafe impl<T: Trace + ?Sized> Trace for Gc<T> {
 
     #[inline]
     unsafe fn root(&self) {
-        assert!(!self.root.get(), "Can't double-root a Gc<T>");
-        self.root.set(true);
+        assert!(!self.is_rooted(), "Can't double-root a Gc<T>");
+        self.set_rooted(true);
 
         self.inner().root_inner();
     }
 
     #[inline]
     unsafe fn unroot(&self) {
-        assert!(self.root.get(), "Can't double-unroot a Gc<T>");
-        self.root.set(false);
+        assert!(self.is_rooted(), "Can't double-unroot a Gc<T>");
+        self.set_rooted(false);
 
         self.inner().unroot_inner();
     }
@@ -102,7 +135,9 @@ impl<T: Trace + ?Sized> Clone for Gc<T> {
     #[inline]
     fn clone(&self) -> Gc<T> {
         unsafe { self.inner().root_inner(); }
-        Gc { _ptr: self._ptr, root: Cell::new(true) }
+        let gc = Gc { _ptr: self._ptr };
+        gc.set_rooted(true);
+        gc
     }
 }
 
@@ -119,7 +154,7 @@ impl<T: Trace + ?Sized> Drop for Gc<T> {
     #[inline]
     fn drop(&mut self) {
         // If this pointer was a root, we should unroot it.
-        if self.root.get() {
+        if self.is_rooted() {
             unsafe { self.inner().unroot_inner(); }
         }
     }
