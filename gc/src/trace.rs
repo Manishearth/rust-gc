@@ -93,6 +93,14 @@ unsafe impl<T: Trace> Trace for Vec<T> {
     });
 }
 
+unsafe impl<T: Trace> Trace for &'static [T] {
+    custom_trace!(this, {
+        for e in *this {
+            mark(e);
+        }
+    });
+}
+
 unsafe impl<T: Trace> Trace for Option<T> {
     custom_trace!(this, {
         if let Some(ref v) = *this {
