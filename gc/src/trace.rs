@@ -77,8 +77,6 @@ unsafe impl Trace for f64 { unsafe_empty_trace!(); }
 
 unsafe impl Trace for String { unsafe_empty_trace!(); }
 
-unsafe impl Trace for &'static str { unsafe_empty_trace!(); }
-
 unsafe impl<T: Trace> Trace for Box<T> {
     custom_trace!(this, {
         mark(&**this);
