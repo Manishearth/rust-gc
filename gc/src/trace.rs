@@ -59,7 +59,7 @@ macro_rules! custom_trace {
     }
 }
 
-unsafe impl<T> Trace for &'static T {
+unsafe impl<T: ?Sized> Trace for &'static T {
     unsafe_empty_trace!();
 }
 
@@ -93,13 +93,6 @@ unsafe impl<T: Trace> Trace for Vec<T> {
     });
 }
 
-unsafe impl<T: Trace> Trace for &'static [T] {
-    custom_trace!(this, {
-        for e in *this {
-            mark(e);
-        }
-    });
-}
 
 unsafe impl<T: Trace> Trace for Option<T> {
     custom_trace!(this, {
