@@ -13,6 +13,7 @@ use gc::GcBox;
 use std::cell::{self, Cell, RefCell, BorrowState};
 use std::ops::{Deref, DerefMut, CoerceUnsized};
 use std::marker;
+use std::fmt::*;
 
 mod gc;
 mod trace;
@@ -254,5 +255,12 @@ impl<'a, T: Trace + ?Sized> Drop for GcCellRefMut<'a, T> {
         if !self._rooted.get() {
             unsafe { self._ref.unroot(); }
         }
+    }
+}
+
+
+impl Debug for Gc<String> {
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        write!(f, "{}", **self)
     }
 }
