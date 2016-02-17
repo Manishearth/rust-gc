@@ -3,12 +3,13 @@
 
 #[macro_use]
 extern crate syntax;
+extern crate syntax_ext;
 #[macro_use]
 extern crate rustc;
+extern crate rustc_plugin;
 
 
-
-use rustc::plugin::Registry;
+use rustc_plugin::Registry;
 use syntax::parse::token::intern;
 
 use syntax::attr::AttrMetaMethods;
@@ -17,7 +18,7 @@ use syntax::codemap::Span;
 use syntax::ptr::P;
 use syntax::ast::{MetaItem, Expr};
 use syntax::ext::build::AstBuilder;
-use syntax::ext::deriving::generic::{combine_substructure, EnumMatching, FieldInfo, MethodDef, Struct, Substructure, TraitDef, ty};
+use syntax_ext::deriving::generic::{combine_substructure, EnumMatching, FieldInfo, MethodDef, Struct, Substructure, TraitDef, ty};
 
 
 #[plugin_registrar]

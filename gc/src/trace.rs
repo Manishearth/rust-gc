@@ -63,6 +63,8 @@ unsafe impl<T: ?Sized> Trace for &'static T {
     unsafe_empty_trace!();
 }
 
+unsafe impl Trace for usize { unsafe_empty_trace!(); }
+unsafe impl Trace for bool { unsafe_empty_trace!(); }
 unsafe impl Trace for i8  { unsafe_empty_trace!(); }
 unsafe impl Trace for u8  { unsafe_empty_trace!(); }
 unsafe impl Trace for i16 { unsafe_empty_trace!(); }
