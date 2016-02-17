@@ -4,7 +4,7 @@
 //! It is marked as non-sendable because the garbage collection only occurs
 //! thread locally.
 
-#![feature(borrow_state, coerce_unsized, core, optin_builtin_traits, nonzero, unsize)]
+#![feature(borrow_state, coerce_unsized, optin_builtin_traits, nonzero, unsize)]
 
 extern crate core;
 
@@ -259,8 +259,8 @@ impl<'a, T: Trace + ?Sized> Drop for GcCellRefMut<'a, T> {
 }
 
 
-impl Debug for Gc<String> {
+impl<T: Debug+Trace> Debug for Gc<T> {
     fn fmt(&self, f: &mut Formatter) -> Result {
-        write!(f, "{}", **self)
+        write!(f, "{:?}", **self)
     }
 }
