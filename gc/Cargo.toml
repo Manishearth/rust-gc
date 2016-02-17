@@ -8,6 +8,6 @@ readme = "../README.md"
 license = "MPL-2.0"
 keywords = ["garbage", "plugin", "memory"]
 
-[dependencies.gc_plugin]
+[dev-dependencies.gc_plugin]
 path = "../gc_plugin"
 version = "0.0.5"
