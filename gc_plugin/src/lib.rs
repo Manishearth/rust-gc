@@ -73,9 +73,20 @@ pub fn expand_trace(cx: &mut ExtCtxt, span: Span, mitem: &MetaItem, item: &Annot
 
 // Mostly copied from syntax::ext::deriving::hash and Servo's #[jstraceable]
 fn trace_substructure(cx: &mut ExtCtxt, trait_span: Span, substr: &Substructure) -> P<Expr> {
-    let trace_ident = substr.method_ident;
+    let trace_path = {
+        let strs = vec![
+            cx.ident_of("gc"),
+            cx.ident_of("trace"),
+            cx.ident_of("Trace"),
+            substr.method_ident,
+        ];
+
+        cx.expr_path(cx.path_global(trait_span, strs))
+    };
+
     let call_trace = |span, thing_expr| {
-        let expr = cx.expr_method_call(span, thing_expr, trace_ident, vec!());
+        // let expr = cx.expr_method_call(span, thing_expr, trace_ident, vec!());
+        let expr = cx.expr_call(span, trace_path.clone(), vec!(cx.expr_addr_of(span, thing_expr)));
         cx.stmt_expr(expr)
     };
     let mut stmts = Vec::new();
