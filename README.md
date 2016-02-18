@@ -7,8 +7,9 @@ Works, but still under construction.
 
 The design and motivation is illustrated in [this blog post](http://manishearth.github.io/blog/2015/09/01/designing-a-gc-in-rust/), with a sketch of the code [in this gist](https://gist.github.com/mystor/fa1141bfb30643289597).
 
-## Use
+There is [another post](http://blog.zhenzhang.me/2016/02/18/cgc.html) about the initial design of `cgc`, its experimental concurrent branch.
 
+## How to use
 To include in your project, add the following to your Cargo.toml:
 
 ```
@@ -102,4 +103,8 @@ let foo3 = Gc::new(Foo {cyclic: GcCell::new(Some(foo2.clone())), data: 3});
 
 - Destructors should not access `Gc`/`GcCell` values. We may add finalizers in the future, but we'd need to figure out a way to prevent this.
 - There needs to be a better story for cross-crate deriving, but we may have to wait for the middle IR to land to work on this.
-- The current GC is not concurrent and the GC'd objects are confined to a thread. THhere is an experimental concurrent collector [in this pull request](https://github.com/Manishearth/rust-gc/pull/6).
+- The current GC is not concurrent and the GCed objects are confined to a thread. There is an experimental concurrent collector [in this pull request](https://github.com/Manishearth/rust-gc/pull/6).
+
+
+## Related projects
+* [RuScript](https://github.com/izgzhen/RuScript): Uses single-thread `rust-gc` to allocate memory for various objects
