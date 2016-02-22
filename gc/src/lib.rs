@@ -13,7 +13,9 @@ use gc::GcBox;
 use std::cell::{self, Cell, RefCell, BorrowState};
 use std::ops::{Deref, DerefMut, CoerceUnsized};
 use std::marker;
-use std::fmt::*;
+use std::fmt;
+use core::cmp::Ordering;
+use core::hash::{Hasher, Hash};
 
 mod gc;
 mod trace;
@@ -125,6 +127,94 @@ impl<T: Trace + ?Sized> Drop for Gc<T> {
         }
     }
 }
+
+
+impl<T: Trace + Default> Default for Gc<T> {
+    #[inline]
+    fn default() -> Gc<T> {
+        Gc::new(Default::default())
+    }
+}
+
+impl<T: Trace + ?Sized + PartialEq> PartialEq for Gc<T> {
+    #[inline(always)]
+    fn eq(&self, other: &Gc<T>) -> bool {
+        **self == **other
+    }
+
+    #[inline(always)]
+    fn ne(&self, other: &Gc<T>) -> bool {
+        **self != **other
+    }
+}
+
+impl<T: Trace + ?Sized + Eq> Eq for Gc<T> {}
+
+
+impl<T: Trace + ?Sized + PartialOrd> PartialOrd for Gc<T> {
+    #[inline(always)]
+    fn partial_cmp(&self, other: &Gc<T>) -> Option<Ordering> {
+        (**self).partial_cmp(&**other)
+    }
+
+    #[inline(always)]
+    fn lt(&self, other: &Gc<T>) -> bool {
+        **self < **other
+    }
+
+    #[inline(always)]
+    fn le(&self, other: &Gc<T>) -> bool {
+        **self <= **other
+    }
+
+    #[inline(always)]
+    fn gt(&self, other: &Gc<T>) -> bool {
+        **self > **other
+    }
+
+    #[inline(always)]
+    fn ge(&self, other: &Gc<T>) -> bool {
+        **self >= **other
+    }
+}
+
+impl<T: Trace + ?Sized + Ord> Ord for Gc<T> {
+    #[inline]
+    fn cmp(&self, other: &Gc<T>) -> Ordering {
+        (**self).cmp(&**other)
+    }
+}
+
+impl<T: Trace + ?Sized + Hash> Hash for Gc<T> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        (**self).hash(state);
+    }
+}
+
+impl<T: Trace + ?Sized + fmt::Display> fmt::Display for Gc<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Display::fmt(&**self, f)
+    }
+}
+
+impl<T: fmt::Debug+Trace> fmt::Debug for Gc<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", **self)
+    }
+}
+
+impl<T: Trace> fmt::Pointer for Gc<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Pointer::fmt(&*self._ptr, f)
+    }
+}
+
+impl<T: Trace> From<T> for Gc<T> {
+    fn from(t: T) -> Self {
+        Gc::new(t)
+    }
+}
+
 
 ////////////
 // GcCell //
@@ -259,8 +349,83 @@ impl<'a, T: Trace + ?Sized> Drop for GcCellRefMut<'a, T> {
 }
 
 
-impl<T: Debug+Trace> Debug for Gc<T> {
-    fn fmt(&self, f: &mut Formatter) -> Result {
-        write!(f, "{:?}", **self)
+impl<T: Trace + Default> Default for GcCell<T> {
+    #[inline]
+    fn default() -> GcCell<T> {
+        GcCell::new(Default::default())
     }
 }
+
+impl<T: Trace + ?Sized + PartialEq> PartialEq for GcCell<T> {
+    #[inline(always)]
+    fn eq(&self, other: &GcCell<T>) -> bool {
+        *self.borrow() == *other.borrow()
+    }
+
+    #[inline(always)]
+    fn ne(&self, other: &GcCell<T>) -> bool {
+        *self.borrow() != *other.borrow()
+    }
+}
+
+impl<T: Trace + ?Sized + Eq> Eq for GcCell<T> {}
+
+
+impl<T: Trace + ?Sized + PartialOrd> PartialOrd for GcCell<T> {
+    #[inline(always)]
+    fn partial_cmp(&self, other: &GcCell<T>) -> Option<Ordering> {
+        (*self.borrow()).partial_cmp(&*other.borrow())
+    }
+
+    #[inline(always)]
+    fn lt(&self, other: &GcCell<T>) -> bool {
+        *self.borrow() < *other.borrow()
+    }
+
+    #[inline(always)]
+    fn le(&self, other: &GcCell<T>) -> bool {
+        *self.borrow() <= *other.borrow()
+    }
+
+    #[inline(always)]
+    fn gt(&self, other: &GcCell<T>) -> bool {
+        *self.borrow() > *other.borrow()
+    }
+
+    #[inline(always)]
+    fn ge(&self, other: &GcCell<T>) -> bool {
+        *self.borrow() >= *other.borrow()
+    }
+}
+
+impl<T: Trace + ?Sized + Ord> Ord for GcCell<T> {
+    #[inline]
+    fn cmp(&self, other: &GcCell<T>) -> Ordering {
+        (*self.borrow()).cmp(&*other.borrow())
+    }
+}
+
+impl<T: Trace + ?Sized + Hash> Hash for GcCell<T> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        (*self.borrow()).hash(state);
+    }
+}
+
+impl<T: Trace + ?Sized + fmt::Display> fmt::Display for GcCell<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Display::fmt(&*self.borrow(), f)
+    }
+}
+
+impl<T: fmt::Debug+Trace> fmt::Debug for GcCell<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", *self.borrow())
+    }
+}
+
+impl<T: Trace> From<T> for GcCell<T> {
+    fn from(t: T) -> Self {
+        GcCell::new(t)
+    }
+}
+
