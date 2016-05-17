@@ -42,7 +42,8 @@ pub fn expand_trace(cx: &mut ExtCtxt, span: Span, mitem: &MetaItem, item: &Annot
                 ret_ty: ty::nil_ty(),
                 attributes: vec![], // todo: handle inlining
                 is_unsafe: true,
-                combine_substructure: combine_substructure(box trace_substructure)
+                combine_substructure: combine_substructure(box trace_substructure),
+                unify_fieldless_variants: false,
             },
             MethodDef {
                 name: "root",
@@ -52,7 +53,8 @@ pub fn expand_trace(cx: &mut ExtCtxt, span: Span, mitem: &MetaItem, item: &Annot
                 ret_ty: ty::nil_ty(),
                 attributes: vec![],
                 is_unsafe: true,
-                combine_substructure: combine_substructure(box trace_substructure)
+                combine_substructure: combine_substructure(box trace_substructure),
+                unify_fieldless_variants: false,
             },
             MethodDef {
                 name: "unroot",
@@ -62,7 +64,8 @@ pub fn expand_trace(cx: &mut ExtCtxt, span: Span, mitem: &MetaItem, item: &Annot
                 ret_ty: ty::nil_ty(),
                 attributes: vec![],
                 is_unsafe: true,
-                combine_substructure: combine_substructure(box trace_substructure)
+                combine_substructure: combine_substructure(box trace_substructure),
+                unify_fieldless_variants: false,
             }
         ],
         associated_types: vec![],
@@ -92,7 +95,7 @@ fn trace_substructure(cx: &mut ExtCtxt, trait_span: Span, substr: &Substructure)
     let mut stmts = Vec::new();
 
     let fields = match *substr.fields {
-        Struct(ref fs) | EnumMatching(_, _, ref fs) => fs,
+        Struct(_, ref fs) | EnumMatching(_, _, ref fs) => fs,
         _ => cx.span_bug(trait_span, "impossible substructure in `#[derive(Trace)]`")
     };
 

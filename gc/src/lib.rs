@@ -18,7 +18,7 @@ use core::cmp::Ordering;
 use core::hash::{Hasher, Hash};
 
 mod gc;
-mod trace;
+pub mod trace;
 
 // We re-export the Trace method, as well as some useful internal methods for
 // managing collections or configuring the garbage collector.
@@ -428,4 +428,3 @@ impl<T: Trace> From<T> for GcCell<T> {
         GcCell::new(t)
     }
 }
-
