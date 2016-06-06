@@ -10,4 +10,4 @@ keywords = ["garbage", "plugin", "memory"]
 
 [dev-dependencies.gc_plugin]
 path = "../gc_plugin"
-version = "0.0.6"
+version = "0.0.7"
