@@ -1,0 +1,7 @@
+language: rust
+sudo: true
+rust: nightly
+script:
+- cd gc
+- cargo build
+- cargo test
