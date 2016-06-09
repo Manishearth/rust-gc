@@ -3,12 +3,13 @@
 
 #[macro_use]
 extern crate syntax;
+extern crate syntax_ext;
 #[macro_use]
 extern crate rustc;
+extern crate rustc_plugin;
 
 
-
-use rustc::plugin::Registry;
+use rustc_plugin::Registry;
 use syntax::parse::token::intern;
 
 use syntax::ext::base::{Annotatable, ExtCtxt, MultiDecorator};
@@ -16,7 +17,7 @@ use syntax::codemap::Span;
 use syntax::ptr::P;
 use syntax::ast::{MetaItem, Expr};
 use syntax::ext::build::AstBuilder;
-use syntax::ext::deriving::generic::{combine_substructure, EnumMatching, FieldInfo, MethodDef, Struct, Substructure, TraitDef, ty};
+use syntax_ext::deriving::generic::{combine_substructure, EnumMatching, FieldInfo, MethodDef, Struct, Substructure, TraitDef, ty};
 
 
 #[plugin_registrar]
@@ -44,9 +45,11 @@ pub fn expand_trace(cx: &mut ExtCtxt, span: Span, mitem: &MetaItem, item: &Annot
                 ret_ty: ty::nil_ty(),
                 attributes: vec![],
                 is_unsafe: true,
+                unify_fieldless_variants: false,
                 combine_substructure: combine_substructure(box trace_substructure)
             }
         ],
+        is_unsafe: false,
         associated_types: vec![],
     };
     trait_def.expand(cx, mitem, item, push)
@@ -68,7 +71,7 @@ fn trace_substructure(cx: &mut ExtCtxt, trait_span: Span, substr: &Substructure)
     let mut stmts = Vec::new();
 
     let fields = match *substr.fields {
-        Struct(ref fs) | EnumMatching(_, _, ref fs) => fs,
+        Struct(_, ref fs) | EnumMatching(_, _, ref fs) => fs,
         _ => cx.span_bug(trait_span, "impossible substructure in `#[derive(Trace)]`")
     };
 
