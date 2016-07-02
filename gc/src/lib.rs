@@ -419,7 +419,7 @@ impl<T: Trace + ?Sized + fmt::Display> fmt::Display for GcCell<T> {
 
 impl<T: Trace + ?Sized + fmt::Debug> fmt::Debug for GcCell<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt:Debug::fmt(&*self.borrow(), f)
+        fmt::Debug::fmt(&*self.borrow(), f)
     }
 }
 
