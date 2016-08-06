@@ -1,15 +1,18 @@
-/// The Trace trait which needs to be implemented on garbage collected objects
+/// The Trace trait, which needs to be implemented on garbage-collected objects.
 pub unsafe trait Trace {
-    /// Mark all contained Gcs
+    /// Marks all contained `Gc`s.
     unsafe fn trace(&self);
-    /// Increment the root-count of all contained Gcs
+
+    /// Increments the root-count of all contained `Gc`s.
     unsafe fn root(&self);
-    /// Decrement the root-count of all contained Gcs
+
+    /// Decrements the root-count of all contained `Gc`s.
     unsafe fn unroot(&self);
 }
 
-/// This simple rule implements the trace methods such with empty
-/// implementations - use this for marking types as not containing any Trace types!
+/// This rule implements the trace methods with empty implementations.
+///
+/// Use this for marking types as not containing any `Trace` types.
 #[macro_export]
 macro_rules! unsafe_empty_trace {
     () => {
@@ -22,10 +25,11 @@ macro_rules! unsafe_empty_trace {
     }
 }
 
-/// This rule implements the trace method. You define a this parameter name, and
-/// pass in a body, the body should call `mark` on every traceable element inside
-/// the body, and the mark implementation will automatically delegate to the correct
-/// method on the argument.
+/// This rule implements the trace method.
+///
+/// You define a `this` parameter name and pass in a body, which should call `mark` on every
+/// traceable element inside the body. The mark implementation will automatically delegate to the
+/// correct method on the argument.
 #[macro_export]
 macro_rules! custom_trace {
     ($this:ident, $body:expr) => {
@@ -92,7 +96,6 @@ unsafe impl<T: Trace> Trace for Vec<T> {
         }
     });
 }
-
 
 unsafe impl<T: Trace> Trace for Option<T> {
     custom_trace!(this, {

@@ -1,6 +1,6 @@
-use std::ptr::{self, Shared};
-use std::mem;
 use std::cell::{Cell, RefCell};
+use std::mem;
+use std::ptr::{self, Shared};
 use trace::Trace;
 
 const INITIAL_THRESHOLD: usize = 100;
@@ -18,8 +18,8 @@ struct GcState {
     boxes_end: *mut Option<Box<GcBox<Trace + 'static>>>,
 }
 
-/// Whether or not the thread is currently in the sweep phase of garbage collection
-/// During this phase, attempts to dereference a Gc<T> pointer will trigger a panic
+/// Whether or not the thread is currently in the sweep phase of garbage collection.
+/// During this phase, attempts to dereference a `Gc<T>` pointer will trigger a panic.
 thread_local!(static GC_SWEEPING: Cell<bool> = Cell::new(false));
 
 /// The garbage collector's internal state.
@@ -44,12 +44,11 @@ pub struct GcBox<T: Trace + ?Sized + 'static> {
 }
 
 impl<T: Trace> GcBox<T> {
-    /// Allocate a garbage collected GcBox on the heap,
-    /// and append it to the thread local GcBox chain.
+    /// Allocates a garbage collected `GcBox` on the heap,
+    /// and appends it to the thread-local `GcBox` chain.
     ///
-    /// The GcBox allocated this way starts it's life
-    /// rooted.
-    pub fn new(value: T) -> Shared<GcBox<T>> {
+    /// A `GcBox` allocated this way starts its life rooted.
+    pub fn new(value: T) -> Shared<Self> {
         GC_STATE.with(|_st| {
             let mut st = _st.borrow_mut();
 
@@ -100,7 +99,7 @@ impl<T: Trace> GcBox<T> {
 }
 
 impl<T: Trace + ?Sized> GcBox<T> {
-    /// Mark this GcBox, and trace through it's data
+    /// Marks this `GcBox` and traces through its data.
     pub unsafe fn trace_inner(&self) {
         let marked = self.header.marked.get();
         if !marked {
@@ -109,9 +108,8 @@ impl<T: Trace + ?Sized> GcBox<T> {
         }
     }
 
-    /// Increase the root count on this GcBox.
-    /// Roots prevent the GcBox from being destroyed by
-    /// the garbage collector.
+    /// Increases the root count on this `GcBox`.
+    /// Roots prevent the `GcBox` from being destroyed by the garbage collector.
     pub unsafe fn root_inner(&self) {
         // abort if the count overflows to prevent `mem::forget` loops that could otherwise lead to
         // erroneous drops
@@ -119,14 +117,13 @@ impl<T: Trace + ?Sized> GcBox<T> {
                               .checked_add(1).unwrap_or_else(|| ::std::intrinsics::abort()));
     }
 
-    /// Decrease the root count on this GcBox.
-    /// Roots prevent the GcBox from being destroyed by
-    /// the garbage collector.
+    /// Decreases the root count on this `GcBox`.
+    /// Roots prevent the `GcBox` from being destroyed by the garbage collector.
     pub unsafe fn unroot_inner(&self) {
         self.header.roots.set(self.header.roots.get() - 1);
     }
 
-    /// Get the value form the GcBox
+    /// Returns a reference to the `GcBox`'s value.
     pub fn value(&self) -> &T {
         // XXX This may be too expensive, but will help catch errors with
         // accessing Gc values in destructors.
@@ -138,10 +135,11 @@ impl<T: Trace + ?Sized> GcBox<T> {
     fn header_mut(&mut self) -> &mut GcBoxHeader {
         &mut self.header
     }
+
     fn size_of(&self) -> usize { mem::size_of_val(self) }
 }
 
-/// Collect some garbage!
+/// Collects garbage.
 fn collect_garbage(st: &mut GcState) {
     let mut next_node = &mut st.boxes_start
         as *mut Option<Box<GcBox<Trace + 'static>>>;
@@ -192,10 +190,10 @@ fn collect_garbage(st: &mut GcState) {
     GC_SWEEPING.with(|collecting| collecting.set(false));
 }
 
-/// Immediately trigger a garbage collection on the current thread.
+/// Immediately triggers a garbage collection on the current thread.
 pub fn force_collect() {
-    GC_STATE.with(|_st| {
-        let mut st = _st.borrow_mut();
+    GC_STATE.with(|st| {
+        let mut st = st.borrow_mut();
         collect_garbage(&mut *st);
     });
 }

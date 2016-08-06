@@ -4,7 +4,7 @@
 extern crate gc;
 
 use std::cell::Cell;
-use gc::{Trace, GcCell, Gc, force_collect};
+use gc::{GcCell, Gc, force_collect};
 
 thread_local!(static COUNTER: Cell<u8> = Cell::new(0u8));
 
