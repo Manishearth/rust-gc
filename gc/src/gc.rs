@@ -114,7 +114,10 @@ impl<T: Trace + ?Sized> GcBox<T> {
     /// Roots prevent the GcBox from being destroyed by
     /// the garbage collector.
     pub unsafe fn root_inner(&self) {
-        self.header.roots.set(self.header.roots.get() + 1);
+        // abort if the count overflows to prevent `mem::forget` loops that could otherwise lead to
+        // erroneous drops
+        self.header.roots.set(self.header.roots.get()
+                              .checked_add(1).unwrap_or_else(|| ::std::intrinsics::abort()));
     }
 
     /// Decrease the root count on this GcBox.
