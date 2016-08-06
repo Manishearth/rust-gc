@@ -4,18 +4,16 @@
 //! It is marked as non-sendable because the garbage collection only occurs
 //! thread locally.
 
-#![feature(borrow_state, coerce_unsized, core_intrinsics, optin_builtin_traits, nonzero, unsize)]
+#![feature(borrow_state, coerce_unsized, core_intrinsics, optin_builtin_traits, shared, unsize)]
 
-extern crate core;
-
-use core::nonzero::NonZero;
 use gc::GcBox;
 use std::cell::{self, Cell, RefCell, BorrowState};
 use std::ops::{Deref, DerefMut, CoerceUnsized};
 use std::marker;
 use std::fmt;
-use core::cmp::Ordering;
-use core::hash::{Hasher, Hash};
+use std::cmp::Ordering;
+use std::hash::{Hasher, Hash};
+use std::ptr::Shared;
 
 mod gc;
 pub mod trace;
@@ -35,7 +33,7 @@ pub use gc::force_collect;
 pub struct Gc<T: Trace + ?Sized + 'static> {
     // XXX We can probably take advantage of alignment to store this
     root: Cell<bool>,
-    _ptr: NonZero<*mut GcBox<T>>,
+    _ptr: Shared<GcBox<T>>,
 }
 
 impl<T: ?Sized> !marker::Send for Gc<T> {}

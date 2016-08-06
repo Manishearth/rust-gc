@@ -1,5 +1,4 @@
-use core::nonzero::NonZero;
-use std::ptr;
+use std::ptr::{self, Shared};
 use std::mem;
 use std::cell::{Cell, RefCell};
 use trace::Trace;
@@ -50,7 +49,7 @@ impl<T: Trace> GcBox<T> {
     ///
     /// The GcBox allocated this way starts it's life
     /// rooted.
-    pub fn new(value: T) -> NonZero<*mut GcBox<T>> {
+    pub fn new(value: T) -> Shared<GcBox<T>> {
         GC_STATE.with(|_st| {
             let mut st = _st.borrow_mut();
 
@@ -75,7 +74,7 @@ impl<T: Trace> GcBox<T> {
                 data: value,
             });
 
-            let gcbox_ptr = unsafe { NonZero::new(&mut *gcbox as *mut _) };
+            let gcbox_ptr = unsafe { Shared::new(&mut *gcbox as *mut _) };
 
             let next_boxes_end = &mut gcbox.header.next as *mut _;
             if st.boxes_end.is_null() {
