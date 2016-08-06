@@ -105,5 +105,5 @@ fn trace_substructure(cx: &mut ExtCtxt, trait_span: Span, substr: &Substructure)
         }
     }
 
-    cx.expr_block(cx.block(trait_span, stmts, None))
+    cx.expr_block(cx.block(trait_span, stmts))
 }
