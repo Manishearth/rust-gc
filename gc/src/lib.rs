@@ -4,7 +4,7 @@
 //! It is marked as non-sendable because the garbage collection only occurs
 //! thread locally.
 
-#![feature(borrow_state, coerce_unsized, optin_builtin_traits, nonzero, unsize)]
+#![feature(borrow_state, coerce_unsized, core_intrinsics, optin_builtin_traits, nonzero, unsize)]
 
 extern crate core;
 
