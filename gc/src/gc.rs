@@ -32,7 +32,7 @@ impl Drop for GcState {
 
 /// Whether or not the thread is currently in the sweep phase of garbage collection.
 /// During this phase, attempts to dereference a `Gc<T>` pointer will trigger a panic.
-thread_local!(static GC_SWEEPING: Cell<bool> = Cell::new(false));
+thread_local!(pub static GC_SWEEPING: Cell<bool> = Cell::new(false));
 
 /// The garbage collector's internal state.
 thread_local!(static GC_STATE: RefCell<GcState> = RefCell::new(GcState {
@@ -124,10 +124,6 @@ impl<T: Trace + ?Sized> GcBox<T> {
 
     /// Returns a reference to the `GcBox`'s value.
     pub fn value(&self) -> &T {
-        // XXX This may be too expensive, but will help catch errors with
-        // accessing Gc values in destructors.
-        GC_SWEEPING.with(|sweeping| assert!(!sweeping.get(),
-                                            "Gc pointers may be invalid when GC is running"));
         &self.data
     }
 

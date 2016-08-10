@@ -18,6 +18,9 @@ use std::ptr::Shared;
 mod gc;
 pub mod trace;
 
+#[cfg(test)]
+mod test;
+
 // We re-export the Trace method, as well as some useful internal methods for
 // managing collections or configuring the garbage collector.
 pub use trace::Trace;
@@ -72,6 +75,13 @@ impl<T: Trace> Gc<T> {
 impl<T: Trace + ?Sized> Gc<T> {
     #[inline]
     fn inner(&self) -> &GcBox<T> {
+        // The GcBox behind this pointer might not be valid anymore if the GC
+        // is running, so we panic, instead of accessing the potentially
+        // invalid ptr.
+        gc::GC_SWEEPING.with(|sweeping| {
+            assert!(!sweeping.get(),
+                    "Cannot access GC-ed objects while GC is running");
+        });
         unsafe { &**self.ptr }
     }
 }
@@ -85,17 +95,25 @@ unsafe impl<T: Trace + ?Sized> Trace for Gc<T> {
     #[inline]
     unsafe fn root(&self) {
         assert!(!self.root.get(), "Can't double-root a Gc<T>");
-        self.root.set(true);
 
+        // Try to get inner before modifying our state. Inner may be
+        // inaccessible due to this method being invoked during the sweeping
+        // phase, and we don't want to modify our state before panicking.
         self.inner().root_inner();
+
+        self.root.set(true);
     }
 
     #[inline]
     unsafe fn unroot(&self) {
         assert!(self.root.get(), "Can't double-unroot a Gc<T>");
-        self.root.set(false);
 
+        // Try to get inner before modifying our state. Inner may be
+        // inaccessible due to this method being invoked during the sweeping
+        // phase, and we don't want to modify our state before panicking.
         self.inner().unroot_inner();
+
+        self.root.set(false);
     }
 }
 
@@ -421,3 +439,4 @@ impl<T: Trace> From<T> for GcCell<T> {
         Self::new(t)
     }
 }
+
