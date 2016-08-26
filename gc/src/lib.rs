@@ -4,16 +4,19 @@
 //! It is marked as non-sendable because the garbage collection only occurs
 //! thread-locally.
 
-#![feature(borrow_state, coerce_unsized, core_intrinsics, optin_builtin_traits, shared, unsize)]
+#![feature(borrow_state, coerce_unsized, core_intrinsics, nonzero, optin_builtin_traits, shared, unsize)]
 
+extern crate core;
+
+use core::nonzero::NonZero;
 use gc::GcBox;
 use std::cell::{self, BorrowState, Cell, RefCell};
 use std::cmp::Ordering;
 use std::fmt;
 use std::hash::{Hash, Hasher};
-use std::marker;
+use std::marker::{self, PhantomData};
+use std::mem;
 use std::ops::{CoerceUnsized, Deref, DerefMut};
-use std::ptr::Shared;
 
 mod gc;
 pub mod trace;
@@ -34,9 +37,8 @@ pub use gc::force_collect;
 ///
 /// See the [module level documentation](./) for more details.
 pub struct Gc<T: Trace + ?Sized + 'static> {
-    // XXX We can probably take advantage of alignment to store this
-    root: Cell<bool>,
-    ptr: Shared<GcBox<T>>,
+    ptr_root: Cell<NonZero<*const GcBox<T>>>,
+    marker: PhantomData<T>,
 }
 
 impl<T: ?Sized> !Send for Gc<T> {}
@@ -60,6 +62,8 @@ impl<T: Trace> Gc<T> {
     /// let five = Gc::new(5);
     /// ```
     pub fn new(value: T) -> Self {
+        assert!(mem::align_of::<GcBox<T>>() > 1);
+
         unsafe {
             // Allocate the memory for the object
             let ptr = GcBox::new(value);
@@ -67,12 +71,35 @@ impl<T: Trace> Gc<T> {
             // When we create a Gc<T>, all pointers which have been moved to the
             // heap no longer need to be rooted, so we unroot them.
             (**ptr).value().unroot();
-            Gc { ptr: ptr, root: Cell::new(true) }
+            let gc = Gc { ptr_root: Cell::new(NonZero::new(*ptr)), marker: PhantomData };
+            gc.set_root();
+            gc
         }
     }
 }
 
+/// Returns the given pointer with its root bit cleared.
+unsafe fn clear_root_bit<T: ?Sized + Trace>(ptr: NonZero<*const GcBox<T>>) -> NonZero<*const GcBox<T>> {
+    let mut ptr = *ptr;
+    *(&mut ptr as *mut *const GcBox<T> as *mut usize) &= !1;
+    NonZero::new(ptr)
+}
+
 impl<T: Trace + ?Sized> Gc<T> {
+    fn rooted(&self) -> bool {
+        *self.ptr_root.get() as *const u8 as usize & 1 != 0
+    }
+
+    unsafe fn set_root(&self) {
+        let mut ptr = *self.ptr_root.get();
+        *(&mut ptr as *mut *const GcBox<T> as *mut usize) |= 1;
+        self.ptr_root.set(NonZero::new(ptr));
+    }
+
+    unsafe fn clear_root(&self) {
+        self.ptr_root.set(clear_root_bit(self.ptr_root.get()));
+    }
+
     #[inline]
     fn inner(&self) -> &GcBox<T> {
         // The GcBox behind this pointer might not be valid anymore if the GC
@@ -82,7 +109,7 @@ impl<T: Trace + ?Sized> Gc<T> {
             assert!(!sweeping.get(),
                     "Cannot access GC-ed objects while GC is running");
         });
-        unsafe { &**self.ptr }
+        unsafe { &**clear_root_bit(self.ptr_root.get()) }
     }
 }
 
@@ -94,34 +121,38 @@ unsafe impl<T: Trace + ?Sized> Trace for Gc<T> {
 
     #[inline]
     unsafe fn root(&self) {
-        assert!(!self.root.get(), "Can't double-root a Gc<T>");
+        assert!(!self.rooted(), "Can't double-root a Gc<T>");
 
         // Try to get inner before modifying our state. Inner may be
         // inaccessible due to this method being invoked during the sweeping
         // phase, and we don't want to modify our state before panicking.
         self.inner().root_inner();
 
-        self.root.set(true);
+        self.set_root();
     }
 
     #[inline]
     unsafe fn unroot(&self) {
-        assert!(self.root.get(), "Can't double-unroot a Gc<T>");
+        assert!(self.rooted(), "Can't double-unroot a Gc<T>");
 
         // Try to get inner before modifying our state. Inner may be
         // inaccessible due to this method being invoked during the sweeping
         // phase, and we don't want to modify our state before panicking.
         self.inner().unroot_inner();
 
-        self.root.set(false);
+        self.clear_root();
     }
 }
 
 impl<T: Trace + ?Sized> Clone for Gc<T> {
     #[inline]
     fn clone(&self) -> Self {
-        unsafe { self.inner().root_inner(); }
-        Gc { ptr: self.ptr, root: Cell::new(true) }
+        unsafe {
+            self.inner().root_inner();
+            let gc = Gc { ptr_root: Cell::new(self.ptr_root.get()), marker: PhantomData };
+            gc.set_root();
+            gc
+        }
     }
 }
 
@@ -138,7 +169,7 @@ impl<T: Trace + ?Sized> Drop for Gc<T> {
     #[inline]
     fn drop(&mut self) {
         // If this pointer was a root, we should unroot it.
-        if self.root.get() {
+        if self.rooted() {
             unsafe { self.inner().unroot_inner(); }
         }
     }
@@ -219,7 +250,7 @@ impl<T: Trace + ?Sized + fmt::Debug> fmt::Debug for Gc<T> {
 
 impl<T: Trace> fmt::Pointer for Gc<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Pointer::fmt(&*self.ptr, f)
+        fmt::Pointer::fmt(&self.inner(), f)
     }
 }
 
