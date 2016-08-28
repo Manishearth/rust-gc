@@ -1,4 +1,4 @@
-#![feature(plugin, custom_derive)]
+#![feature(plugin, custom_derive, specialization)]
 
 #![plugin(gc_plugin)]
 extern crate gc;
@@ -14,8 +14,8 @@ struct Cyclic {
     name: u8,
 }
 
-impl Drop for Cyclic {
-    fn drop(&mut self) {
+impl gc::Finalize for Cyclic {
+    fn finalize(&self) {
         COUNTER.with(|count| count.set(count.get() + 1));
         println!("Dropped {}", self.name);
     }

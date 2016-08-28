@@ -4,7 +4,7 @@
 //! It is marked as non-sendable because the garbage collection only occurs
 //! thread-locally.
 
-#![feature(coerce_unsized, core_intrinsics, nonzero, optin_builtin_traits, shared, unsize)]
+#![feature(coerce_unsized, core_intrinsics, nonzero, optin_builtin_traits, shared, unsize, specialization)]
 
 extern crate core;
 
@@ -21,13 +21,10 @@ use std::ops::{CoerceUnsized, Deref, DerefMut};
 mod gc;
 pub mod trace;
 
-#[cfg(test)]
-mod test;
-
 // We re-export the Trace method, as well as some useful internal methods for
 // managing collections or configuring the garbage collector.
-pub use trace::Trace;
-pub use gc::force_collect;
+pub use trace::{Finalize, Trace};
+pub use gc::{force_collect, finalizer_safe};
 
 ////////
 // Gc //
@@ -102,13 +99,14 @@ impl<T: Trace + ?Sized> Gc<T> {
 
     #[inline]
     fn inner(&self) -> &GcBox<T> {
-        // The GcBox behind this pointer might not be valid anymore if the GC
-        // is running, so we panic, instead of accessing the potentially
-        // invalid ptr.
-        gc::GC_SWEEPING.with(|sweeping| {
-            assert!(!sweeping.get(),
-                    "Cannot access GC-ed objects while GC is running");
-        });
+        // If we are currently in the dropping phase of garbage collection,
+        // it would be undefined behavior to dereference this pointer.
+        // By opting into `Trace` you agree to not dereference this pointer
+        // within your drop method, meaning that it should be safe.
+        //
+        // This assert exists just in case.
+        assert!(finalizer_safe());
+
         unsafe { &**clear_root_bit(self.ptr_root.get()) }
     }
 }
@@ -142,6 +140,9 @@ unsafe impl<T: Trace + ?Sized> Trace for Gc<T> {
 
         self.clear_root();
     }
+
+    #[inline]
+    fn finalize_glue(&self) { Finalize::finalize(self); }
 }
 
 impl<T: Trace + ?Sized> Clone for Gc<T> {
@@ -456,6 +457,15 @@ unsafe impl<T: Trace + ?Sized> Trace for GcCell<T> {
         match self.flags.get().borrowed() {
             BorrowState::Writing => (),
             _ => (*self.cell.get()).unroot(),
+        }
+    }
+
+    #[inline]
+    fn finalize_glue(&self) {
+        Finalize::finalize(self);
+        match self.flags.get().borrowed() {
+            BorrowState::Writing => (),
+            _ => unsafe { (*self.cell.get()).finalize_glue() },
         }
     }
 }

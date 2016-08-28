@@ -20,9 +20,10 @@ unsafe impl Trace for Foo {
     }
     unsafe fn root(&self){}
     unsafe fn unroot(&self){}
+    fn finalize_glue(&self){}
 }
 
-#[derive(Trace, Copy, Clone)]
+#[derive(Trace, Clone)]
 struct Bar {
     inner: Foo,
 }
@@ -41,8 +42,8 @@ fn test() {
         assert!(*x.borrow() == 1)
     });
     let baz = Baz {
-        a: bar,
-        b: bar
+        a: bar.clone(),
+        b: bar.clone(),
     };
     unsafe { baz.trace(); }
     X.with(|x| {

@@ -1,5 +1,18 @@
+/// The Finalize trait. Can be specialized for a specific type to define
+/// finalization logic for that type.
+pub trait Finalize {
+    fn finalize(&self);
+}
+
+impl<T: ?Sized> Finalize for T {
+    // XXX: Should this function somehow tell its caller (which is presumably
+    // the GC runtime) that it did nothing?
+    #[inline]
+    default fn finalize(&self) {}
+}
+
 /// The Trace trait, which needs to be implemented on garbage-collected objects.
-pub unsafe trait Trace {
+pub unsafe trait Trace : Finalize {
     /// Marks all contained `Gc`s.
     unsafe fn trace(&self);
 
@@ -8,6 +21,10 @@ pub unsafe trait Trace {
 
     /// Decrements the root-count of all contained `Gc`s.
     unsafe fn unroot(&self);
+
+    /// Runs Finalize::finalize() on this object and all
+    /// contained subobjects
+    fn finalize_glue(&self);
 }
 
 /// This rule implements the trace methods with empty implementations.
@@ -22,6 +39,10 @@ macro_rules! unsafe_empty_trace {
         unsafe fn root(&self) {}
         #[inline]
         unsafe fn unroot(&self) {}
+        #[inline]
+        fn finalize_glue(&self) {
+            $crate::Finalize::finalize(self)
+        }
     }
 }
 
@@ -36,8 +57,8 @@ macro_rules! custom_trace {
         #[inline]
         unsafe fn trace(&self) {
             #[inline]
-            unsafe fn mark<T: Trace>(it: &T) {
-                (*it).trace();
+            unsafe fn mark<T: $crate::Trace>(it: &T) {
+                $crate::Trace::trace(it);
             }
             let $this = self;
             $body
@@ -45,8 +66,8 @@ macro_rules! custom_trace {
         #[inline]
         unsafe fn root(&self) {
             #[inline]
-            unsafe fn mark<T: Trace>(it: &T) {
-                (*it).root();
+            unsafe fn mark<T: $crate::Trace>(it: &T) {
+                $crate::Trace::root(it);
             }
             let $this = self;
             $body
@@ -54,8 +75,18 @@ macro_rules! custom_trace {
         #[inline]
         unsafe fn unroot(&self) {
             #[inline]
-            unsafe fn mark<T: Trace>(it: &T) {
-                (*it).unroot();
+            unsafe fn mark<T: $crate::Trace>(it: &T) {
+                $crate::Trace::unroot(it);
+            }
+            let $this = self;
+            $body
+        }
+        #[inline]
+        fn finalize_glue(&self) {
+            $crate::Finalize::finalize(self);
+            #[inline]
+            fn mark<T: $crate::Trace>(it: &T) {
+                $crate::Trace::finalize_glue(it);
             }
             let $this = self;
             $body
