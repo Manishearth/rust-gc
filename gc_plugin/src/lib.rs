@@ -12,7 +12,6 @@ extern crate rustc_plugin;
 use rustc_plugin::Registry;
 use syntax::parse::token::intern;
 
-use syntax::attr::AttrMetaMethods;
 use syntax::ext::base::{Annotatable, ExtCtxt, MultiDecorator};
 use syntax::codemap::Span;
 use syntax::ptr::P;
@@ -70,6 +69,7 @@ pub fn expand_trace(cx: &mut ExtCtxt, span: Span, mitem: &MetaItem, item: &Annot
         ],
         associated_types: vec![],
         is_unsafe: true,
+        supports_unions: false,
     };
     trait_def.expand(cx, mitem, item, push)
 }
