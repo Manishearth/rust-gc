@@ -1,6 +1,6 @@
 [package]
 name = "gc_plugin"
-version = "0.0.7"
+version = "0.0.9"
 authors = ["Manish Goregaokar <manishsmail@gmail.com>", "Michael Layzell <michael@thelayzells.com>"]
 
 description = "Garbage collector plugin for rust-gc"
