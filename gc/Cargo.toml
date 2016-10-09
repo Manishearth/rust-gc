@@ -9,4 +9,4 @@ license = "MPL-2.0"
 keywords = ["garbage", "plugin", "memory"]
 
 [dev-dependencies]
-gc_derive = { path = "../gc_derive" }
+gc_derive = { path = "../gc_derive", version = "0.2.0" }
