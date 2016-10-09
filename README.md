@@ -15,19 +15,20 @@ To include in your project, add the following to your Cargo.toml:
 ```
 [dependencies]
 gc = "*"
-gc_plugin = "*"
+gc_derive = "*"
 ```
 
 This can be used pretty much like `Rc`, with the exception of interior mutability.
 
 While this can be used pervasively, this is intended to be used only when needed, following Rust's "pay only for what you need" model. Avoid using `Gc` where `Rc` or `Box` would be equally usable.
 
-Types placed inside a `Gc` must implement `Trace`. The easiest way to do this is to use the existing plugin:
+Types placed inside a `Gc` must implement `Trace`. The easiest way to do this is to use the `gc_derive` crate:
 
 ```rust
-#![feature(plugin, custom_derive)]
+#![feature(proc_macro)]
 
-#![plugin(gc_plugin)]
+#[macro_use]
+extern crate gc_derive;
 extern crate gc;
 
 use gc::Gc;
@@ -47,9 +48,10 @@ For types defined in the stdlib, please file an issue on this repository (use th
 Note that `Trace` is only needed for types which transitively contain a `Gc`, if you are sure that this isn't the case, you may use the `unsafe_empty_trace!` macro on your types. Alternatively, use the `#[unsafe_ignore_trace]` annotation on the struct field. Incorrect usage of `unsafe_empty_trace` and `unsafe_ignore_trace` may lead to unsafety.
 
 ```rust
-#![feature(plugin, custom_derive, custom_attribute)]
+#![feature(proc_macro)]
 
-#![plugin(gc_plugin)]
+#[macro_use]
+extern crate gc_derive;
 extern crate gc;
 
 extern crate bar;
