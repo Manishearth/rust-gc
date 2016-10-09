@@ -1,7 +1,7 @@
 use std::cell::{Cell, RefCell};
 use std::mem;
 use std::ptr::Shared;
-use trace::Trace;
+use trace::{Finalize, Trace};
 
 const INITIAL_THRESHOLD: usize = 100;
 
@@ -20,8 +20,15 @@ struct GcState {
 impl Drop for GcState {
     fn drop(&mut self) {
         unsafe {
-            GC_SWEEPING.with(|collecting| collecting.set(true));
+            {
+                let mut p = &self.boxes_start;
+                while let Some(node) = *p {
+                    Finalize::finalize(&(**node).data);
+                    p = &(**node).header.next;
+                }
+            }
 
+            let _guard = DropGuard::new();
             while let Some(node) = self.boxes_start {
                 let node = Box::from_raw(*node);
                 self.boxes_start = node.header.next;
@@ -32,7 +39,22 @@ impl Drop for GcState {
 
 /// Whether or not the thread is currently in the sweep phase of garbage collection.
 /// During this phase, attempts to dereference a `Gc<T>` pointer will trigger a panic.
-thread_local!(pub static GC_SWEEPING: Cell<bool> = Cell::new(false));
+thread_local!(pub static GC_DROPPING: Cell<bool> = Cell::new(false));
+struct DropGuard;
+impl DropGuard {
+    fn new() -> DropGuard {
+        GC_DROPPING.with(|dropping| dropping.set(true));
+        DropGuard
+    }
+}
+impl Drop for DropGuard {
+    fn drop(&mut self) {
+        GC_DROPPING.with(|dropping| dropping.set(false));
+    }
+}
+pub fn finalizer_safe() -> bool {
+    GC_DROPPING.with(|dropping| !dropping.get())
+}
 
 /// The garbage collector's internal state.
 thread_local!(static GC_STATE: RefCell<GcState> = RefCell::new(GcState {
@@ -44,6 +66,7 @@ thread_local!(static GC_STATE: RefCell<GcState> = RefCell::new(GcState {
 pub struct GcBoxHeader {
     // XXX This is horribly space inefficient - not sure if we care
     // We are using a word word bool - there is a full 63 bits of unused data :(
+    // XXX: Should be able to store marked in the high bit of roots?
     roots: Cell<usize>,
     next: Option<Shared<GcBox<Trace>>>,
     marked: Cell<bool>,
@@ -98,7 +121,7 @@ impl<T: Trace> GcBox<T> {
 }
 
 impl<T: Trace + ?Sized> GcBox<T> {
-    /// Marks this `GcBox` and traces through its data.
+    /// Marks this `GcBox` and marks through its data.
     pub unsafe fn trace_inner(&self) {
         let marked = self.header.marked.get();
         if !marked {
@@ -126,49 +149,71 @@ impl<T: Trace + ?Sized> GcBox<T> {
     pub fn value(&self) -> &T {
         &self.data
     }
-
-    fn size_of(&self) -> usize { mem::size_of_val(self) }
 }
 
 /// Collects garbage.
 fn collect_garbage(st: &mut GcState) {
-    unsafe fn mark(mut head: Option<Shared<GcBox<Trace>>>) {
-        while let Some(node) = head {
+    struct Unmarked {
+        incoming: *mut Option<Shared<GcBox<Trace>>>,
+        this: Shared<GcBox<Trace>>,
+    }
+    unsafe fn mark(head: &mut Option<Shared<GcBox<Trace>>>)
+                   -> Vec<Unmarked> {
+        // Walk the tree, tracing and marking the nodes
+        let mut mark_head = *head;
+        while let Some(node) = mark_head {
             if (**node).header.roots.get() > 0 {
                 (**node).trace_inner();
             }
 
-            head = (**node).header.next;
+            mark_head = (**node).header.next;
         }
+
+        // Collect a vector of all of the nodes which were not marked,
+        // and unmark the ones which were.
+        let mut unmarked = Vec::new();
+        let mut unmark_head = head;
+        while let Some(node) = *unmark_head {
+            if (**node).header.marked.get() {
+                (**node).header.marked.set(false);
+            } else {
+                unmarked.push(Unmarked {
+                    incoming: unmark_head,
+                    this: node,
+                });
+            }
+            unmark_head = &mut (**node).header.next;
+        }
+        unmarked
     }
 
-    unsafe fn sweep(mut head: &mut Option<Shared<GcBox<Trace>>>, bytes_allocated: &mut usize) {
-        GC_SWEEPING.with(|collecting| collecting.set(true));
-
-        while let Some(node) = *head {
-            if (**node).header.marked.get() {
-                // This node has already been marked - we're done!
-                (**node).header.marked.set(false);
-                head = &mut (**node).header.next;
-            } else {
-                // The node wasn't marked - we need to delete it
-                let mut node = Box::from_raw(*node);
-                *bytes_allocated -= node.size_of();
-                *head = node.header.next.take();
+    unsafe fn sweep(finalized: Vec<Unmarked>, bytes_allocated: &mut usize) {
+        let _guard = DropGuard::new();
+        for node in finalized.into_iter().rev() {
+            if (**node.this).header.marked.get() {
+                continue
             }
+            let incoming = node.incoming;
+            let mut node = Box::from_raw(*node.this);
+            *bytes_allocated -= mem::size_of_val::<GcBox<_>>(&*node);
+            *incoming = node.header.next.take();
         }
-
-        // XXX This should probably be done with some kind of finally guard
-        GC_SWEEPING.with(|collecting| collecting.set(false));
     }
 
     unsafe {
-        mark(st.boxes_start);
-        sweep(&mut st.boxes_start, &mut st.bytes_allocated);
+        let unmarked = mark(&mut st.boxes_start);
+        if unmarked.is_empty() { return }
+        for node in &unmarked {
+            Trace::finalize_glue(&(**node.this).data);
+        }
+        mark(&mut st.boxes_start);
+        sweep(unmarked, &mut st.bytes_allocated);
     }
 }
 
 /// Immediately triggers a garbage collection on the current thread.
+///
+/// This will panic if executed while a collection is currently in progress
 pub fn force_collect() {
     GC_STATE.with(|st| {
         let mut st = st.borrow_mut();
