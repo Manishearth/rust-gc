@@ -1,6 +1,7 @@
-#![feature(plugin, custom_derive)]
+#![feature(proc_macro, specialization)]
 
-#![plugin(gc_plugin)]
+#[macro_use]
+extern crate gc_derive;
 extern crate gc;
 use std::cell::RefCell;
 
