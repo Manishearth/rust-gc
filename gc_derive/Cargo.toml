@@ -16,4 +16,4 @@ proc-macro = true
 [dependencies]
 syn = "0.9"
 quote = "0.3"
-synstructure = "0.1"
+synstructure = "0.2"

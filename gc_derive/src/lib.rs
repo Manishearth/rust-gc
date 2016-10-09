@@ -14,7 +14,7 @@ pub fn derive_trace(input: TokenStream) -> TokenStream {
     let source = input.to_string();
     let mut ast = syn::parse_macro_input(&source).unwrap();
 
-    let trace = synstructure::each_field(&mut ast, BindStyle::Ref, |bi| {
+    let trace = synstructure::each_field(&mut ast, &BindStyle::Ref.into(), |bi| {
         // Check if this field is annotated with an #[unsafe_ignore_trace], and
         // remove the attribute if it is present.
         let attr_cnt = bi.field.attrs.len();
