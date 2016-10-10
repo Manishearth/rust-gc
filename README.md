@@ -12,7 +12,7 @@ There is [another post](http://blog.zhenzhang.me/2016/02/18/cgc.html) about the 
 ## How to use
 To include in your project, add the following to your Cargo.toml:
 
-```
+```toml
 [dependencies]
 gc = "*"
 gc_derive = "*"
