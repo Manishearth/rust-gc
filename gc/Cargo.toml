@@ -1,6 +1,6 @@
 [package]
 name = "gc"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["Manish Goregaokar <manishsmail@gmail.com>", "Michael Layzell <michael@thelayzells.com>"]
 description = "Tracing garbage collector plugin for Rust. Not ready for use yet, please see README"
 repository = "https://github.com/Manishearth/rust-gc"
@@ -9,4 +9,4 @@ license = "MPL-2.0"
 keywords = ["garbage", "plugin", "memory"]
 
 [dev-dependencies]
-gc_derive = { path = "../gc_derive", version = "0.2.0" }
+gc_derive = { path = "../gc_derive", version = "0.2.1" }

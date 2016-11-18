@@ -9,18 +9,14 @@ extern crate quote;
 use proc_macro::TokenStream;
 use synstructure::BindStyle;
 
-#[proc_macro_derive(Trace)]
+#[proc_macro_derive(Trace, attributes(unsafe_ignore_trace))]
 pub fn derive_trace(input: TokenStream) -> TokenStream {
     let source = input.to_string();
-    let mut ast = syn::parse_macro_input(&source).unwrap();
+    let ast = syn::parse_macro_input(&source).unwrap();
 
-    let trace = synstructure::each_field(&mut ast, &BindStyle::Ref.into(), |bi| {
-        // Check if this field is annotated with an #[unsafe_ignore_trace], and
-        // remove the attribute if it is present.
-        let attr_cnt = bi.field.attrs.len();
-        bi.field.attrs.retain(|attr| attr.name() != "unsafe_ignore_trace");
-
-        if bi.field.attrs.len() != attr_cnt {
+    let trace = synstructure::each_field(&ast, &BindStyle::Ref.into(), |bi| {
+        // Check if this field is annotated with an #[unsafe_ignore_trace]
+        if bi.field.attrs.iter().any(|attr| attr.name() == "unsafe_ignore_trace") {
             quote::Tokens::new()
         } else {
             quote!(mark(#bi);)
@@ -31,9 +27,6 @@ pub fn derive_trace(input: TokenStream) -> TokenStream {
     let name = &ast.ident;
     let (impl_generics, ty_generics, where_clause) = ast.generics.split_for_impl();
     let result = quote! {
-        // Original struct
-        #ast
-
         unsafe impl #impl_generics ::gc::Trace for #name #ty_generics #where_clause {
             #[inline] unsafe fn trace(&self) {
                 #[allow(dead_code)]
