@@ -26,12 +26,12 @@ impl gc::Finalize for Cyclic {
 fn test_cycle() {
     {
         let mut gcs = vec![Gc::new(Cyclic {
-            prev: GcCell::new(None),
-            name: 0,
-        })];
+                               prev: GcCell::new(None),
+                               name: 0,
+                           })];
 
         for i in 1..4 {
-            let prev = gcs[i-1].clone();
+            let prev = gcs[i - 1].clone();
             gcs.push(Gc::new(Cyclic {
                 prev: GcCell::new(Some(prev)),
                 name: i as u8,

@@ -246,14 +246,19 @@ fn gccell_rooting() {
     FLAGS.with(|f| assert_eq!(f.get(), GcWatchFlags::new(3, 1, 2, 1, 1)));
 }
 
-#[cfg(feature = "nightly")] // XXX: CoerceUnsize is unstable only
+#[cfg(feature = "nightly")]
+// XXX: CoerceUnsize is unstable only
 #[test]
 fn trait_gc() {
     #[derive(Trace)]
     struct Bar;
-    trait Foo: Trace { fn f(&self) -> i32; }
+    trait Foo: Trace {
+        fn f(&self) -> i32;
+    }
     impl Foo for Bar {
-        fn f(&self) -> i32 { 10 }
+        fn f(&self) -> i32 {
+            10
+        }
     }
     fn use_trait_gc(x: Gc<Foo>) {
         assert_eq!(x.f(), 10);

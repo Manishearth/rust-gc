@@ -13,7 +13,7 @@ impl<T: ?Sized> Finalize for T {
 }
 
 /// The Trace trait, which needs to be implemented on garbage-collected objects.
-pub unsafe trait Trace : Finalize {
+pub unsafe trait Trace: Finalize {
     /// Marks all contained `Gc`s.
     unsafe fn trace(&self);
 
@@ -109,21 +109,7 @@ macro_rules! simple_empty_finalize_trace {
     }
 }
 
-simple_empty_finalize_trace![
-    usize,
-    bool,
-    i8,
-    u8,
-    i16,
-    u16,
-    i32,
-    u32,
-    i64,
-    u64,
-    f32,
-    f64,
-    String
-];
+simple_empty_finalize_trace![usize, bool, i8, u8, i16, u16, i32, u32, i64, u64, f32, f64, String];
 
 impl<T: Trace> Finalize for Box<T> {}
 unsafe impl<T: Trace> Trace for Box<T> {

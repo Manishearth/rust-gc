@@ -84,7 +84,10 @@ impl<T: Trace> Gc<T> {
             // When we create a Gc<T>, all pointers which have been moved to the
             // heap no longer need to be rooted, so we unroot them.
             (**ptr).value().unroot();
-            let gc = Gc { ptr_root: Cell::new(NonZero::new(*ptr)), marker: PhantomData };
+            let gc = Gc {
+                ptr_root: Cell::new(NonZero::new(*ptr)),
+                marker: PhantomData,
+            };
             gc.set_root();
             gc
         }
@@ -92,7 +95,8 @@ impl<T: Trace> Gc<T> {
 }
 
 /// Returns the given pointer with its root bit cleared.
-unsafe fn clear_root_bit<T: ?Sized + Trace>(ptr: NonZero<*const GcBox<T>>) -> NonZero<*const GcBox<T>> {
+unsafe fn clear_root_bit<T: ?Sized + Trace>(ptr: NonZero<*const GcBox<T>>)
+                                            -> NonZero<*const GcBox<T>> {
     let mut ptr = *ptr;
     *(&mut ptr as *mut *const GcBox<T> as *mut usize) &= !1;
     NonZero::new(ptr)
@@ -160,7 +164,9 @@ unsafe impl<T: Trace + ?Sized> Trace for Gc<T> {
     }
 
     #[inline]
-    fn finalize_glue(&self) { Finalize::finalize(self); }
+    fn finalize_glue(&self) {
+        Finalize::finalize(self);
+    }
 }
 
 impl<T: Trace + ?Sized> Clone for Gc<T> {
@@ -168,7 +174,10 @@ impl<T: Trace + ?Sized> Clone for Gc<T> {
     fn clone(&self) -> Self {
         unsafe {
             self.inner().root_inner();
-            let gc = Gc { ptr_root: Cell::new(self.ptr_root.get()), marker: PhantomData };
+            let gc = Gc {
+                ptr_root: Cell::new(self.ptr_root.get()),
+                marker: PhantomData,
+            };
             gc.set_root();
             gc
         }
@@ -189,7 +198,9 @@ impl<T: Trace + ?Sized> Drop for Gc<T> {
     fn drop(&mut self) {
         // If this pointer was a root, we should unroot it.
         if self.rooted() {
-            unsafe { self.inner().unroot_inner(); }
+            unsafe {
+                self.inner().unroot_inner();
+            }
         }
     }
 }
@@ -383,9 +394,7 @@ impl<T: Trace> GcCell<T> {
     /// Consumes the `GcCell`, returning the wrapped value.
     #[inline]
     pub fn into_inner(self) -> T {
-        unsafe {
-            self.cell.into_inner()
-        }
+        unsafe { self.cell.into_inner() }
     }
 }
 
@@ -501,7 +510,9 @@ impl<'a, T: Trace + ?Sized> Deref for GcCellRef<'a, T> {
     type Target = T;
 
     #[inline]
-    fn deref(&self) -> &T { self.value }
+    fn deref(&self) -> &T {
+        self.value
+    }
 }
 
 impl<'a, T: Trace + ?Sized> Drop for GcCellRef<'a, T> {
@@ -528,12 +539,16 @@ impl<'a, T: Trace + ?Sized> Deref for GcCellRefMut<'a, T> {
     type Target = T;
 
     #[inline]
-    fn deref(&self) -> &T { self.value }
+    fn deref(&self) -> &T {
+        self.value
+    }
 }
 
 impl<'a, T: Trace + ?Sized> DerefMut for GcCellRefMut<'a, T> {
     #[inline]
-    fn deref_mut(&mut self) -> &mut T { self.value }
+    fn deref_mut(&mut self) -> &mut T {
+        self.value
+    }
 }
 
 impl<'a, T: Trace + ?Sized> Drop for GcCellRefMut<'a, T> {
@@ -543,7 +558,9 @@ impl<'a, T: Trace + ?Sized> Drop for GcCellRefMut<'a, T> {
         // Restore the rooted state of the GcCell's contents to the state of the GcCell.
         // During the lifetime of the GcCellRefMut, the GcCell's contents are rooted.
         if !self.flags.get().rooted() {
-            unsafe { self.value.unroot(); }
+            unsafe {
+                self.value.unroot();
+            }
         }
         self.flags.set(self.flags.get().set_unused());
     }

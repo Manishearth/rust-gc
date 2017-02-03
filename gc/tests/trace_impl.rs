@@ -19,9 +19,9 @@ unsafe impl Trace for Foo {
             *m = *m + 1;
         })
     }
-    unsafe fn root(&self){}
-    unsafe fn unroot(&self){}
-    fn finalize_glue(&self){}
+    unsafe fn root(&self) {}
+    unsafe fn unroot(&self) {}
+    fn finalize_glue(&self) {}
 }
 
 #[derive(Trace, Clone, Finalize)]
@@ -37,17 +37,17 @@ struct Baz {
 
 #[test]
 fn test() {
-    let bar = Bar{inner: Foo};
-    unsafe { bar.trace(); }
-    X.with(|x| {
-        assert!(*x.borrow() == 1)
-    });
+    let bar = Bar { inner: Foo };
+    unsafe {
+        bar.trace();
+    }
+    X.with(|x| assert!(*x.borrow() == 1));
     let baz = Baz {
         a: bar.clone(),
         b: bar.clone(),
     };
-    unsafe { baz.trace(); }
-    X.with(|x| {
-        assert!(*x.borrow() == 3)
-    });
+    unsafe {
+        baz.trace();
+    }
+    X.with(|x| assert!(*x.borrow() == 3));
 }

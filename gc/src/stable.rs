@@ -8,7 +8,7 @@ use std::marker::PhantomData;
 /// See `::core::nonzero::NonZero`
 #[derive(Copy, Clone)]
 pub struct NonZero<T> {
-    p: T
+    p: T,
 }
 
 impl<T> Deref for NonZero<T> {
@@ -20,9 +20,7 @@ impl<T> Deref for NonZero<T> {
 
 impl<T> NonZero<T> {
     pub unsafe fn new(p: T) -> NonZero<T> {
-        NonZero {
-            p: p
-        }
+        NonZero { p: p }
     }
 }
 
@@ -49,7 +47,9 @@ impl<T: ?Sized> Deref for Shared<T> {
 }
 
 impl<T: ?Sized> Clone for Shared<T> {
-    fn clone(&self) -> Self { *self }
+    fn clone(&self) -> Self {
+        *self
+    }
 }
 
 impl<T: ?Sized> Copy for Shared<T> {}
