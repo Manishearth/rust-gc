@@ -1,4 +1,4 @@
-#![feature(proc_macro, specialization)]
+#![cfg_attr(feature = "nightly", feature(specialization))]
 
 #[macro_use]
 extern crate gc_derive;

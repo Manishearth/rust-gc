@@ -1,7 +1,11 @@
 use std::cell::{Cell, RefCell};
 use std::mem;
-use std::ptr::Shared;
 use trace::{Finalize, Trace};
+
+#[cfg(feature = "nightly")]
+use std::ptr::Shared;
+#[cfg(not(feature = "nightly"))]
+use stable::Shared;
 
 const INITIAL_THRESHOLD: usize = 100;
 
@@ -90,7 +94,7 @@ impl<T: Trace> GcBox<T> {
             if st.bytes_allocated > st.threshold {
                 collect_garbage(&mut *st);
 
-                if st.bytes_allocated as f64 > st.threshold as f64 * USED_SPACE_RATIO  {
+                if st.bytes_allocated as f64 > st.threshold as f64 * USED_SPACE_RATIO {
                     // we didn't collect enough, so increase the
                     // threshold for next time, to avoid thrashing the
                     // collector too much/behaving quadratically.
@@ -98,24 +102,22 @@ impl<T: Trace> GcBox<T> {
                 }
             }
 
-            let gcbox = unsafe {
-                Shared::new(Box::into_raw(Box::new(GcBox {
-                    header: GcBoxHeader {
-                        roots: Cell::new(1),
-                        marked: Cell::new(false),
-                        next: st.boxes_start.take(),
-                    },
-                    data: value,
-                })))
-            };
+            let gcbox = Box::into_raw(Box::new(GcBox {
+                header: GcBoxHeader {
+                    roots: Cell::new(1),
+                    marked: Cell::new(false),
+                    next: st.boxes_start.take(),
+                },
+                data: value,
+            }));
 
-            st.boxes_start = Some(gcbox);
+            st.boxes_start = Some(unsafe { Shared::new(gcbox) });
 
             // We allocated some bytes! Let's record it
             st.bytes_allocated += mem::size_of::<GcBox<T>>();
 
             // Return the pointer to the newly allocated data
-            gcbox
+            unsafe { Shared::new(gcbox) }
         })
     }
 }
@@ -135,8 +137,7 @@ impl<T: Trace + ?Sized> GcBox<T> {
     pub unsafe fn root_inner(&self) {
         // abort if the count overflows to prevent `mem::forget` loops that could otherwise lead to
         // erroneous drops
-        self.header.roots.set(self.header.roots.get()
-                              .checked_add(1).unwrap_or_else(|| ::std::intrinsics::abort()));
+        self.header.roots.set(self.header.roots.get().checked_add(1).unwrap());
     }
 
     /// Decreases the root count on this `GcBox`.
@@ -157,8 +158,7 @@ fn collect_garbage(st: &mut GcState) {
         incoming: *mut Option<Shared<GcBox<Trace>>>,
         this: Shared<GcBox<Trace>>,
     }
-    unsafe fn mark(head: &mut Option<Shared<GcBox<Trace>>>)
-                   -> Vec<Unmarked> {
+    unsafe fn mark(head: &mut Option<Shared<GcBox<Trace>>>) -> Vec<Unmarked> {
         // Walk the tree, tracing and marking the nodes
         let mut mark_head = *head;
         while let Some(node) = mark_head {
@@ -191,7 +191,7 @@ fn collect_garbage(st: &mut GcState) {
         let _guard = DropGuard::new();
         for node in finalized.into_iter().rev() {
             if (**node.this).header.marked.get() {
-                continue
+                continue;
             }
             let incoming = node.incoming;
             let mut node = Box::from_raw(*node.this);
@@ -202,7 +202,9 @@ fn collect_garbage(st: &mut GcState) {
 
     unsafe {
         let unmarked = mark(&mut st.boxes_start);
-        if unmarked.is_empty() { return }
+        if unmarked.is_empty() {
+            return;
+        }
         for node in &unmarked {
             Trace::finalize_glue(&(**node.this).data);
         }

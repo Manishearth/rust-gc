@@ -16,17 +16,25 @@ fn discard(b: &mut test::Bencher, n: usize) {
 fn keep(b: &mut test::Bencher, n: usize) {
     b.iter(|| {
         gc::force_collect();
-        (0..n).map(|_| {
-            gc::Gc::new(THING)
-        }).collect::<Vec<_>>()
+        (0..n)
+            .map(|_| gc::Gc::new(THING))
+            .collect::<Vec<_>>()
     })
 }
 
 #[bench]
-fn discard_100(b: &mut test::Bencher) { discard(b, 100) }
+fn discard_100(b: &mut test::Bencher) {
+    discard(b, 100)
+}
 #[bench]
-fn keep_100(b: &mut test::Bencher) { keep(b, 100) }
+fn keep_100(b: &mut test::Bencher) {
+    keep(b, 100)
+}
 #[bench]
-fn discard_10000(b: &mut test::Bencher) { discard(b, 10_000) }
+fn discard_10000(b: &mut test::Bencher) {
+    discard(b, 10_000)
+}
 #[bench]
-fn keep_10000(b: &mut test::Bencher) { keep(b, 10_000) }
+fn keep_10000(b: &mut test::Bencher) {
+    keep(b, 10_000)
+}

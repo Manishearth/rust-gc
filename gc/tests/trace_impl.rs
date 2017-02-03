@@ -1,4 +1,4 @@
-#![feature(proc_macro, specialization)]
+#![cfg_attr(feature = "nightly", feature(specialization))]
 
 #[macro_use]
 extern crate gc_derive;
@@ -9,7 +9,7 @@ thread_local!(static X: RefCell<u8> = RefCell::new(0));
 
 use gc::Trace;
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Finalize)]
 struct Foo;
 
 unsafe impl Trace for Foo {
@@ -19,17 +19,17 @@ unsafe impl Trace for Foo {
             *m = *m + 1;
         })
     }
-    unsafe fn root(&self){}
-    unsafe fn unroot(&self){}
-    fn finalize_glue(&self){}
+    unsafe fn root(&self) {}
+    unsafe fn unroot(&self) {}
+    fn finalize_glue(&self) {}
 }
 
-#[derive(Trace, Clone)]
+#[derive(Trace, Clone, Finalize)]
 struct Bar {
     inner: Foo,
 }
 
-#[derive(Trace)]
+#[derive(Trace, Finalize)]
 struct Baz {
     a: Bar,
     b: Bar,
@@ -37,17 +37,17 @@ struct Baz {
 
 #[test]
 fn test() {
-    let bar = Bar{inner: Foo};
-    unsafe { bar.trace(); }
-    X.with(|x| {
-        assert!(*x.borrow() == 1)
-    });
+    let bar = Bar { inner: Foo };
+    unsafe {
+        bar.trace();
+    }
+    X.with(|x| assert!(*x.borrow() == 1));
     let baz = Baz {
         a: bar.clone(),
         b: bar.clone(),
     };
-    unsafe { baz.trace(); }
-    X.with(|x| {
-        assert!(*x.borrow() == 3)
-    });
+    unsafe {
+        baz.trace();
+    }
+    X.with(|x| assert!(*x.borrow() == 3));
 }

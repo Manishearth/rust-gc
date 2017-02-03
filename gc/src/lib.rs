@@ -4,22 +4,40 @@
 //! It is marked as non-sendable because the garbage collection only occurs
 //! thread-locally.
 
-#![feature(coerce_unsized, core_intrinsics, nonzero, optin_builtin_traits, shared, unsize, specialization)]
+#![cfg_attr(feature = "nightly",
+            feature(coerce_unsized,
+                    nonzero,
+                    optin_builtin_traits,
+                    shared,
+                    unsize,
+                    specialization))]
 
 extern crate core;
 
-use core::nonzero::NonZero;
 use gc::GcBox;
 use std::cell::{Cell, UnsafeCell};
 use std::cmp::Ordering;
 use std::fmt::{self, Debug, Display};
 use std::hash::{Hash, Hasher};
-use std::marker::{self, PhantomData};
+use std::marker::PhantomData;
 use std::mem;
-use std::ops::{CoerceUnsized, Deref, DerefMut};
+use std::ops::{Deref, DerefMut};
+use std::rc::Rc;
+
+#[cfg(feature = "nightly")]
+use std::marker::Unsize;
+#[cfg(feature = "nightly")]
+use std::ops::CoerceUnsized;
+#[cfg(feature = "nightly")]
+use core::nonzero::NonZero;
+
+#[cfg(not(feature = "nightly"))]
+mod stable;
+#[cfg(not(feature = "nightly"))]
+use stable::NonZero;
 
 mod gc;
-pub mod trace;
+mod trace;
 
 // We re-export the Trace method, as well as some useful internal methods for
 // managing collections or configuring the garbage collector.
@@ -35,14 +53,11 @@ pub use gc::{force_collect, finalizer_safe};
 /// See the [module level documentation](./) for more details.
 pub struct Gc<T: Trace + ?Sized + 'static> {
     ptr_root: Cell<NonZero<*const GcBox<T>>>,
-    marker: PhantomData<T>,
+    marker: PhantomData<Rc<T>>,
 }
 
-impl<T: ?Sized> !Send for Gc<T> {}
-
-impl<T: ?Sized> !Sync for Gc<T> {}
-
-impl<T: Trace + ?Sized + marker::Unsize<U>, U: Trace + ?Sized> CoerceUnsized<Gc<U>> for Gc<T> {}
+#[cfg(feature = "nightly")]
+impl<T: Trace + ?Sized + Unsize<U>, U: Trace + ?Sized> CoerceUnsized<Gc<U>> for Gc<T> {}
 
 impl<T: Trace> Gc<T> {
     /// Constructs a new `Gc<T>` with the given value.
@@ -57,6 +72,7 @@ impl<T: Trace> Gc<T> {
     /// use gc::Gc;
     ///
     /// let five = Gc::new(5);
+    /// assert_eq!(*five, 5);
     /// ```
     pub fn new(value: T) -> Self {
         assert!(mem::align_of::<GcBox<T>>() > 1);
@@ -68,7 +84,10 @@ impl<T: Trace> Gc<T> {
             // When we create a Gc<T>, all pointers which have been moved to the
             // heap no longer need to be rooted, so we unroot them.
             (**ptr).value().unroot();
-            let gc = Gc { ptr_root: Cell::new(NonZero::new(*ptr)), marker: PhantomData };
+            let gc = Gc {
+                ptr_root: Cell::new(NonZero::new(*ptr)),
+                marker: PhantomData,
+            };
             gc.set_root();
             gc
         }
@@ -76,7 +95,8 @@ impl<T: Trace> Gc<T> {
 }
 
 /// Returns the given pointer with its root bit cleared.
-unsafe fn clear_root_bit<T: ?Sized + Trace>(ptr: NonZero<*const GcBox<T>>) -> NonZero<*const GcBox<T>> {
+unsafe fn clear_root_bit<T: ?Sized + Trace>(ptr: NonZero<*const GcBox<T>>)
+                                            -> NonZero<*const GcBox<T>> {
     let mut ptr = *ptr;
     *(&mut ptr as *mut *const GcBox<T> as *mut usize) &= !1;
     NonZero::new(ptr)
@@ -111,6 +131,8 @@ impl<T: Trace + ?Sized> Gc<T> {
     }
 }
 
+impl<T: Trace + ?Sized> Finalize for Gc<T> {}
+
 unsafe impl<T: Trace + ?Sized> Trace for Gc<T> {
     #[inline]
     unsafe fn trace(&self) {
@@ -142,7 +164,9 @@ unsafe impl<T: Trace + ?Sized> Trace for Gc<T> {
     }
 
     #[inline]
-    fn finalize_glue(&self) { Finalize::finalize(self); }
+    fn finalize_glue(&self) {
+        Finalize::finalize(self);
+    }
 }
 
 impl<T: Trace + ?Sized> Clone for Gc<T> {
@@ -150,7 +174,10 @@ impl<T: Trace + ?Sized> Clone for Gc<T> {
     fn clone(&self) -> Self {
         unsafe {
             self.inner().root_inner();
-            let gc = Gc { ptr_root: Cell::new(self.ptr_root.get()), marker: PhantomData };
+            let gc = Gc {
+                ptr_root: Cell::new(self.ptr_root.get()),
+                marker: PhantomData,
+            };
             gc.set_root();
             gc
         }
@@ -171,7 +198,9 @@ impl<T: Trace + ?Sized> Drop for Gc<T> {
     fn drop(&mut self) {
         // If this pointer was a root, we should unroot it.
         if self.rooted() {
-            unsafe { self.inner().unroot_inner(); }
+            unsafe {
+                self.inner().unroot_inner();
+            }
         }
     }
 }
@@ -365,9 +394,7 @@ impl<T: Trace> GcCell<T> {
     /// Consumes the `GcCell`, returning the wrapped value.
     #[inline]
     pub fn into_inner(self) -> T {
-        unsafe {
-            self.cell.into_inner()
-        }
+        unsafe { self.cell.into_inner() }
     }
 }
 
@@ -429,6 +456,8 @@ impl<T: Trace + ?Sized> GcCell<T> {
     }
 }
 
+impl<T: Trace + ?Sized> Finalize for GcCell<T> {}
+
 unsafe impl<T: Trace + ?Sized> Trace for GcCell<T> {
     #[inline]
     unsafe fn trace(&self) {
@@ -481,7 +510,9 @@ impl<'a, T: Trace + ?Sized> Deref for GcCellRef<'a, T> {
     type Target = T;
 
     #[inline]
-    fn deref(&self) -> &T { self.value }
+    fn deref(&self) -> &T {
+        self.value
+    }
 }
 
 impl<'a, T: Trace + ?Sized> Drop for GcCellRef<'a, T> {
@@ -508,12 +539,16 @@ impl<'a, T: Trace + ?Sized> Deref for GcCellRefMut<'a, T> {
     type Target = T;
 
     #[inline]
-    fn deref(&self) -> &T { self.value }
+    fn deref(&self) -> &T {
+        self.value
+    }
 }
 
 impl<'a, T: Trace + ?Sized> DerefMut for GcCellRefMut<'a, T> {
     #[inline]
-    fn deref_mut(&mut self) -> &mut T { self.value }
+    fn deref_mut(&mut self) -> &mut T {
+        self.value
+    }
 }
 
 impl<'a, T: Trace + ?Sized> Drop for GcCellRefMut<'a, T> {
@@ -523,7 +558,9 @@ impl<'a, T: Trace + ?Sized> Drop for GcCellRefMut<'a, T> {
         // Restore the rooted state of the GcCell's contents to the state of the GcCell.
         // During the lifetime of the GcCellRefMut, the GcCell's contents are rooted.
         if !self.flags.get().rooted() {
-            unsafe { self.value.unroot(); }
+            unsafe {
+                self.value.unroot();
+            }
         }
         self.flags.set(self.flags.get().set_unused());
     }
@@ -537,8 +574,6 @@ impl<'a, T: Trace + ?Sized + Debug> Debug for GcCellRefMut<'a, T> {
 
 
 unsafe impl<T: ?Sized + Send> Send for GcCell<T> {}
-
-impl<T: ?Sized> !Sync for GcCell<T> {}
 
 impl<T: Trace + Clone> Clone for GcCell<T> {
     #[inline]
