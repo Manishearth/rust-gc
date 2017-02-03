@@ -1,10 +1,15 @@
 language: rust
 sudo: true
-rust: nightly
+rust:
+  - stable
+  - beta
+  - nightly
 script:
-- cd gc
-- cargo build
-- cargo test
+  - cd gc
+  - cargo build
+  - cargo test
+  - ([ $TRAVIS_RUST_VERSION != nightly ] || cargo build --features nightly)
+  - ([ $TRAVIS_RUST_VERSION != nightly ] || cargo test --features nightly)
 after_success: bash ../upload-docs.sh
 env:
   global:

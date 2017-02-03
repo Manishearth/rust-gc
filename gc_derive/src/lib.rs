@@ -1,5 +1,3 @@
-#![feature(proc_macro, proc_macro_lib)]
-
 extern crate proc_macro;
 extern crate syn;
 extern crate synstructure;
@@ -76,5 +74,19 @@ pub fn derive_trace(input: TokenStream) -> TokenStream {
     };
 
     // Generate the final value as a TokenStream and return it
+    result.to_string().parse().unwrap()
+}
+
+#[proc_macro_derive(Finalize)]
+pub fn derive_finalize(input: TokenStream) -> TokenStream {
+    let source = input.to_string();
+    let ast = syn::parse_macro_input(&source).unwrap();
+
+    let name = &ast.ident;
+    let (impl_generics, ty_generics, where_clause) = ast.generics.split_for_impl();
+    let result = quote! {
+        impl #impl_generics ::gc::Finalize for #name #ty_generics #where_clause { }
+    };
+
     result.to_string().parse().unwrap()
 }

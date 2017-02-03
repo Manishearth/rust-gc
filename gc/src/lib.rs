@@ -4,22 +4,40 @@
 //! It is marked as non-sendable because the garbage collection only occurs
 //! thread-locally.
 
-#![feature(coerce_unsized, core_intrinsics, nonzero, optin_builtin_traits, shared, unsize, specialization)]
+#![cfg_attr(feature = "nightly",
+            feature(coerce_unsized,
+                    nonzero,
+                    optin_builtin_traits,
+                    shared,
+                    unsize,
+                    specialization))]
 
 extern crate core;
 
-use core::nonzero::NonZero;
 use gc::GcBox;
 use std::cell::{Cell, UnsafeCell};
 use std::cmp::Ordering;
 use std::fmt::{self, Debug, Display};
 use std::hash::{Hash, Hasher};
-use std::marker::{self, PhantomData};
+use std::marker::PhantomData;
 use std::mem;
-use std::ops::{CoerceUnsized, Deref, DerefMut};
+use std::ops::{Deref, DerefMut};
+use std::rc::Rc;
+
+#[cfg(feature = "nightly")]
+use std::marker::Unsize;
+#[cfg(feature = "nightly")]
+use std::ops::CoerceUnsized;
+#[cfg(feature = "nightly")]
+use core::nonzero::NonZero;
+
+#[cfg(not(feature = "nightly"))]
+mod stable;
+#[cfg(not(feature = "nightly"))]
+use stable::NonZero;
 
 mod gc;
-pub mod trace;
+mod trace;
 
 // We re-export the Trace method, as well as some useful internal methods for
 // managing collections or configuring the garbage collector.
@@ -35,14 +53,11 @@ pub use gc::{force_collect, finalizer_safe};
 /// See the [module level documentation](./) for more details.
 pub struct Gc<T: Trace + ?Sized + 'static> {
     ptr_root: Cell<NonZero<*const GcBox<T>>>,
-    marker: PhantomData<T>,
+    marker: PhantomData<Rc<T>>,
 }
 
-impl<T: ?Sized> !Send for Gc<T> {}
-
-impl<T: ?Sized> !Sync for Gc<T> {}
-
-impl<T: Trace + ?Sized + marker::Unsize<U>, U: Trace + ?Sized> CoerceUnsized<Gc<U>> for Gc<T> {}
+#[cfg(feature = "nightly")]
+impl<T: Trace + ?Sized + Unsize<U>, U: Trace + ?Sized> CoerceUnsized<Gc<U>> for Gc<T> {}
 
 impl<T: Trace> Gc<T> {
     /// Constructs a new `Gc<T>` with the given value.
@@ -57,6 +72,7 @@ impl<T: Trace> Gc<T> {
     /// use gc::Gc;
     ///
     /// let five = Gc::new(5);
+    /// assert_eq!(*five, 5);
     /// ```
     pub fn new(value: T) -> Self {
         assert!(mem::align_of::<GcBox<T>>() > 1);
@@ -110,6 +126,8 @@ impl<T: Trace + ?Sized> Gc<T> {
         unsafe { &**clear_root_bit(self.ptr_root.get()) }
     }
 }
+
+impl<T: Trace + ?Sized> Finalize for Gc<T> {}
 
 unsafe impl<T: Trace + ?Sized> Trace for Gc<T> {
     #[inline]
@@ -429,6 +447,8 @@ impl<T: Trace + ?Sized> GcCell<T> {
     }
 }
 
+impl<T: Trace + ?Sized> Finalize for GcCell<T> {}
+
 unsafe impl<T: Trace + ?Sized> Trace for GcCell<T> {
     #[inline]
     unsafe fn trace(&self) {
@@ -537,8 +557,6 @@ impl<'a, T: Trace + ?Sized + Debug> Debug for GcCellRefMut<'a, T> {
 
 
 unsafe impl<T: ?Sized + Send> Send for GcCell<T> {}
-
-impl<T: ?Sized> !Sync for GcCell<T> {}
 
 impl<T: Trace + Clone> Clone for GcCell<T> {
     #[inline]

@@ -1,9 +1,10 @@
 /// The Finalize trait. Can be specialized for a specific type to define
 /// finalization logic for that type.
 pub trait Finalize {
-    fn finalize(&self);
+    fn finalize(&self) {}
 }
 
+#[cfg(feature = "nightly")]
 impl<T: ?Sized> Finalize for T {
     // XXX: Should this function somehow tell its caller (which is presumably
     // the GC runtime) that it did nothing?
@@ -94,32 +95,44 @@ macro_rules! custom_trace {
     }
 }
 
+impl<T: ?Sized> Finalize for &'static T {}
 unsafe impl<T: ?Sized> Trace for &'static T {
     unsafe_empty_trace!();
 }
 
-unsafe impl Trace for usize { unsafe_empty_trace!(); }
-unsafe impl Trace for bool { unsafe_empty_trace!(); }
-unsafe impl Trace for i8  { unsafe_empty_trace!(); }
-unsafe impl Trace for u8  { unsafe_empty_trace!(); }
-unsafe impl Trace for i16 { unsafe_empty_trace!(); }
-unsafe impl Trace for u16 { unsafe_empty_trace!(); }
-unsafe impl Trace for i32 { unsafe_empty_trace!(); }
-unsafe impl Trace for u32 { unsafe_empty_trace!(); }
-unsafe impl Trace for i64 { unsafe_empty_trace!(); }
-unsafe impl Trace for u64 { unsafe_empty_trace!(); }
+macro_rules! simple_empty_finalize_trace {
+    ($($T:ty),*) => {
+        $(
+            impl Finalize for $T {}
+            unsafe impl Trace for $T { unsafe_empty_trace!(); }
+        )*
+    }
+}
 
-unsafe impl Trace for f32 { unsafe_empty_trace!(); }
-unsafe impl Trace for f64 { unsafe_empty_trace!(); }
+simple_empty_finalize_trace![
+    usize,
+    bool,
+    i8,
+    u8,
+    i16,
+    u16,
+    i32,
+    u32,
+    i64,
+    u64,
+    f32,
+    f64,
+    String
+];
 
-unsafe impl Trace for String { unsafe_empty_trace!(); }
-
+impl<T: Trace> Finalize for Box<T> {}
 unsafe impl<T: Trace> Trace for Box<T> {
     custom_trace!(this, {
         mark(&**this);
     });
 }
 
+impl<T: Trace> Finalize for Vec<T> {}
 unsafe impl<T: Trace> Trace for Vec<T> {
     custom_trace!(this, {
         for e in this {
@@ -128,6 +141,7 @@ unsafe impl<T: Trace> Trace for Vec<T> {
     });
 }
 
+impl<T: Trace> Finalize for Option<T> {}
 unsafe impl<T: Trace> Trace for Option<T> {
     custom_trace!(this, {
         if let Some(ref v) = *this {

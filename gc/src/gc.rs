@@ -1,7 +1,11 @@
 use std::cell::{Cell, RefCell};
 use std::mem;
-use std::ptr::Shared;
 use trace::{Finalize, Trace};
+
+#[cfg(feature = "nightly")]
+use std::ptr::Shared;
+#[cfg(not(feature = "nightly"))]
+use stable::Shared;
 
 const INITIAL_THRESHOLD: usize = 100;
 
@@ -98,24 +102,22 @@ impl<T: Trace> GcBox<T> {
                 }
             }
 
-            let gcbox = unsafe {
-                Shared::new(Box::into_raw(Box::new(GcBox {
-                    header: GcBoxHeader {
-                        roots: Cell::new(1),
-                        marked: Cell::new(false),
-                        next: st.boxes_start.take(),
-                    },
-                    data: value,
-                })))
-            };
+            let gcbox = Box::into_raw(Box::new(GcBox {
+                header: GcBoxHeader {
+                    roots: Cell::new(1),
+                    marked: Cell::new(false),
+                    next: st.boxes_start.take(),
+                },
+                data: value,
+            }));
 
-            st.boxes_start = Some(gcbox);
+            st.boxes_start = Some(unsafe { Shared::new(gcbox) });
 
             // We allocated some bytes! Let's record it
             st.bytes_allocated += mem::size_of::<GcBox<T>>();
 
             // Return the pointer to the newly allocated data
-            gcbox
+            unsafe { Shared::new(gcbox) }
         })
     }
 }
@@ -135,8 +137,7 @@ impl<T: Trace + ?Sized> GcBox<T> {
     pub unsafe fn root_inner(&self) {
         // abort if the count overflows to prevent `mem::forget` loops that could otherwise lead to
         // erroneous drops
-        self.header.roots.set(self.header.roots.get()
-                              .checked_add(1).unwrap_or_else(|| ::std::intrinsics::abort()));
+        self.header.roots.set(self.header.roots.get().checked_add(1).unwrap());
     }
 
     /// Decreases the root count on this `GcBox`.

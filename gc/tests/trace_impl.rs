@@ -1,4 +1,4 @@
-#![feature(proc_macro, specialization)]
+#![cfg_attr(feature = "nightly", feature(specialization))]
 
 #[macro_use]
 extern crate gc_derive;
@@ -9,7 +9,7 @@ thread_local!(static X: RefCell<u8> = RefCell::new(0));
 
 use gc::Trace;
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Finalize)]
 struct Foo;
 
 unsafe impl Trace for Foo {
@@ -24,12 +24,12 @@ unsafe impl Trace for Foo {
     fn finalize_glue(&self){}
 }
 
-#[derive(Trace, Clone)]
+#[derive(Trace, Clone, Finalize)]
 struct Bar {
     inner: Foo,
 }
 
-#[derive(Trace)]
+#[derive(Trace, Finalize)]
 struct Baz {
     a: Bar,
     b: Bar,

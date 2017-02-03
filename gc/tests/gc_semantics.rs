@@ -1,4 +1,4 @@
-#![feature(proc_macro, specialization)]
+#![cfg_attr(feature = "nightly", feature(specialization))]
 
 #[macro_use]
 extern crate gc_derive;
@@ -89,7 +89,7 @@ unsafe impl Trace for GcWatch {
     }
 }
 
-#[derive(Trace)]
+#[derive(Trace, Finalize)]
 struct GcWatchCycle {
     watch: GcWatch,
     cycle: GcCell<Option<Gc<GcWatchCycle>>>,
@@ -246,6 +246,7 @@ fn gccell_rooting() {
     FLAGS.with(|f| assert_eq!(f.get(), GcWatchFlags::new(3, 1, 2, 1, 1)));
 }
 
+#[cfg(feature = "nightly")] // XXX: CoerceUnsize is unstable only
 #[test]
 fn trait_gc() {
     #[derive(Trace)]
