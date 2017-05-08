@@ -33,7 +33,7 @@ use gc::Gc;
 
 #[derive(Trace, Finalize)]
 struct Foo {
-    x: Gc<Foo>,
+    x: Option<Gc<Foo>>,
     y: u8,
     // ...
 }
@@ -81,7 +81,7 @@ use bar::Baz;
 
 #[derive(Trace, Finalize)]
 struct Foo {
-    x: Gc<Foo>,
+    x: Option<Gc<Foo>>,
     #[unsafe_ignore_trace]
     y: Baz, // we are assuming that `Baz` doesn't contain any `Gc` objects
     // ...
