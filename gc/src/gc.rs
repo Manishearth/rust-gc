@@ -27,14 +27,14 @@ impl Drop for GcState {
             {
                 let mut p = &self.boxes_start;
                 while let Some(node) = *p {
-                    Finalize::finalize(&(**node).data);
-                    p = &(**node).header.next;
+                    Finalize::finalize(&(*node.as_ptr()).data);
+                    p = &(*node.as_ptr()).header.next;
                 }
             }
 
             let _guard = DropGuard::new();
             while let Some(node) = self.boxes_start {
-                let node = Box::from_raw(*node);
+                let node = Box::from_raw(node.as_ptr());
                 self.boxes_start = node.header.next;
             }
         }
@@ -162,11 +162,11 @@ fn collect_garbage(st: &mut GcState) {
         // Walk the tree, tracing and marking the nodes
         let mut mark_head = *head;
         while let Some(node) = mark_head {
-            if (**node).header.roots.get() > 0 {
-                (**node).trace_inner();
+            if (*node.as_ptr()).header.roots.get() > 0 {
+                (*node.as_ptr()).trace_inner();
             }
 
-            mark_head = (**node).header.next;
+            mark_head = (*node.as_ptr()).header.next;
         }
 
         // Collect a vector of all of the nodes which were not marked,
@@ -174,15 +174,15 @@ fn collect_garbage(st: &mut GcState) {
         let mut unmarked = Vec::new();
         let mut unmark_head = head;
         while let Some(node) = *unmark_head {
-            if (**node).header.marked.get() {
-                (**node).header.marked.set(false);
+            if (*node.as_ptr()).header.marked.get() {
+                (*node.as_ptr()).header.marked.set(false);
             } else {
                 unmarked.push(Unmarked {
                     incoming: unmark_head,
                     this: node,
                 });
             }
-            unmark_head = &mut (**node).header.next;
+            unmark_head = &mut (*node.as_ptr()).header.next;
         }
         unmarked
     }
@@ -190,11 +190,11 @@ fn collect_garbage(st: &mut GcState) {
     unsafe fn sweep(finalized: Vec<Unmarked>, bytes_allocated: &mut usize) {
         let _guard = DropGuard::new();
         for node in finalized.into_iter().rev() {
-            if (**node.this).header.marked.get() {
+            if (*node.this.as_ptr()).header.marked.get() {
                 continue;
             }
             let incoming = node.incoming;
-            let mut node = Box::from_raw(*node.this);
+            let mut node = Box::from_raw(node.this.as_ptr());
             *bytes_allocated -= mem::size_of_val::<GcBox<_>>(&*node);
             *incoming = node.header.next.take();
         }
@@ -206,7 +206,7 @@ fn collect_garbage(st: &mut GcState) {
             return;
         }
         for node in &unmarked {
-            Trace::finalize_glue(&(**node.this).data);
+            Trace::finalize_glue(&(*node.this.as_ptr()).data);
         }
         mark(&mut st.boxes_start);
         sweep(unmarked, &mut st.bytes_allocated);

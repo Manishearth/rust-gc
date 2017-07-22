@@ -2,7 +2,6 @@
 //! Shared, such that the same code can be used between the nightly and stable
 //! versions of rust-gc.
 
-use std::ops::Deref;
 use std::marker::PhantomData;
 
 /// See `::core::nonzero::NonZero`
@@ -11,16 +10,13 @@ pub struct NonZero<T> {
     p: T,
 }
 
-impl<T> Deref for NonZero<T> {
-    type Target = T;
-    fn deref(&self) -> &T {
-        &self.p
-    }
-}
-
 impl<T> NonZero<T> {
     pub unsafe fn new(p: T) -> NonZero<T> {
         NonZero { p: p }
+    }
+
+    pub fn get(self) -> T {
+        self.p
     }
 }
 
@@ -37,12 +33,9 @@ impl<T: ?Sized> Shared<T> {
             _pd: PhantomData,
         }
     }
-}
 
-impl<T: ?Sized> Deref for Shared<T> {
-    type Target = *mut T;
-    fn deref(&self) -> &*mut T {
-        &self.p
+    pub fn as_ptr(&self) -> *mut T {
+        self.p.get()
     }
 }
 
