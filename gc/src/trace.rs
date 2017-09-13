@@ -1,3 +1,5 @@
+use std::path::{Path, PathBuf};
+
 /// The Finalize trait. Can be specialized for a specific type to define
 /// finalization logic for that type.
 pub trait Finalize {
@@ -109,7 +111,7 @@ macro_rules! simple_empty_finalize_trace {
     }
 }
 
-simple_empty_finalize_trace![(), isize, usize, bool, i8, u8, i16, u16, i32, u32, i64, u64, f32, f64, char, String];
+simple_empty_finalize_trace![(), isize, usize, bool, i8, u8, i16, u16, i32, u32, i64, u64, f32, f64, char, String, Path, PathBuf];
 
 impl<T: Trace> Finalize for Box<T> {}
 unsafe impl<T: Trace> Trace for Box<T> {
