@@ -1,3 +1,5 @@
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::hash::Hash;
 use std::path::{Path, PathBuf};
 
 /// The Finalize trait. Can be specialized for a specific type to define
@@ -133,6 +135,44 @@ impl<T: Trace> Finalize for Option<T> {}
 unsafe impl<T: Trace> Trace for Option<T> {
     custom_trace!(this, {
         if let Some(ref v) = *this {
+            mark(v);
+        }
+    });
+}
+
+impl<K: Trace, V: Trace> Finalize for BTreeMap<K, V> {}
+unsafe impl<K: Trace, V: Trace> Trace for BTreeMap<K, V> {
+    custom_trace!(this, {
+        for (k, v) in this {
+            mark(k);
+            mark(v);
+        }
+    });
+}
+
+impl<T: Trace> Finalize for BTreeSet<T> {}
+unsafe impl<T: Trace> Trace for BTreeSet<T> {
+    custom_trace!(this, {
+        for v in this {
+            mark(v);
+        }
+    });
+}
+
+impl<K: Eq + Hash + Trace, V: Trace> Finalize for HashMap<K, V> {}
+unsafe impl<K: Eq + Hash + Trace, V: Trace> Trace for HashMap<K, V> {
+    custom_trace!(this, {
+        for (k, v) in this.iter() {
+            mark(k);
+            mark(v);
+        }
+    });
+}
+
+impl<T: Eq + Hash + Trace> Finalize for HashSet<T> {}
+unsafe impl<T: Eq + Hash + Trace> Trace for HashSet<T> {
+    custom_trace!(this, {
+        for v in this.iter() {
             mark(v);
         }
     });
