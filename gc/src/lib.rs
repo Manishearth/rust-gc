@@ -85,7 +85,7 @@ impl<T: Trace> Gc<T> {
             // heap no longer need to be rooted, so we unroot them.
             (*ptr.as_ptr()).value().unroot();
             let gc = Gc {
-                ptr_root: Cell::new(NonZero::new(ptr.as_ptr())),
+                ptr_root: Cell::new(NonZero::new_unchecked(ptr.as_ptr())),
                 marker: PhantomData,
             };
             gc.set_root();
@@ -99,7 +99,7 @@ unsafe fn clear_root_bit<T: ?Sized + Trace>(ptr: NonZero<*const GcBox<T>>)
                                             -> NonZero<*const GcBox<T>> {
     let mut ptr = ptr.get();
     *(&mut ptr as *mut *const GcBox<T> as *mut usize) &= !1;
-    NonZero::new(ptr)
+    NonZero::new_unchecked(ptr)
 }
 
 impl<T: Trace + ?Sized> Gc<T> {
@@ -110,7 +110,7 @@ impl<T: Trace + ?Sized> Gc<T> {
     unsafe fn set_root(&self) {
         let mut ptr = self.ptr_root.get().get();
         *(&mut ptr as *mut *const GcBox<T> as *mut usize) |= 1;
-        self.ptr_root.set(NonZero::new(ptr));
+        self.ptr_root.set(NonZero::new_unchecked(ptr));
     }
 
     unsafe fn clear_root(&self) {

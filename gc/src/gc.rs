@@ -111,13 +111,13 @@ impl<T: Trace> GcBox<T> {
                 data: value,
             }));
 
-            st.boxes_start = Some(unsafe { Shared::new(gcbox) });
+            st.boxes_start = Some(unsafe { Shared::new_unchecked(gcbox) });
 
             // We allocated some bytes! Let's record it
             st.bytes_allocated += mem::size_of::<GcBox<T>>();
 
             // Return the pointer to the newly allocated data
-            unsafe { Shared::new(gcbox) }
+            unsafe { Shared::new_unchecked(gcbox) }
         })
     }
 }
