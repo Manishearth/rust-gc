@@ -4,32 +4,16 @@
 
 use std::marker::PhantomData;
 
-/// See `::core::nonzero::NonZero`
-#[derive(Copy, Clone)]
-pub struct NonZero<T> {
-    p: T,
-}
-
-impl<T> NonZero<T> {
-    pub unsafe fn new_unchecked(p: T) -> NonZero<T> {
-        NonZero { p: p }
-    }
-
-    pub fn get(self) -> T {
-        self.p
-    }
-}
-
-/// See `::std::prt::Shared`
+/// See `::std::ptr::Shared`
 pub struct Shared<T: ?Sized> {
-    p: NonZero<*mut T>,
+    p: *mut T,
     _pd: PhantomData<T>,
 }
 
 impl<T: ?Sized> Shared<T> {
     pub unsafe fn new_unchecked(p: *mut T) -> Self {
         Shared {
-            p: NonZero::new_unchecked(p),
+            p: p,
             _pd: PhantomData,
         }
     }

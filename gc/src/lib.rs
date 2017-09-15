@@ -12,8 +12,6 @@
                     unsize,
                     specialization))]
 
-extern crate core;
-
 use gc::GcBox;
 use std::cell::{Cell, UnsafeCell};
 use std::cmp::Ordering;
@@ -29,12 +27,12 @@ use std::marker::Unsize;
 #[cfg(feature = "nightly")]
 use std::ops::CoerceUnsized;
 #[cfg(feature = "nightly")]
-use core::nonzero::NonZero;
+use std::ptr::Shared;
 
 #[cfg(not(feature = "nightly"))]
 mod stable;
 #[cfg(not(feature = "nightly"))]
-use stable::NonZero;
+use stable::Shared;
 
 mod gc;
 mod trace;
@@ -52,7 +50,7 @@ pub use gc::{force_collect, finalizer_safe};
 ///
 /// See the [module level documentation](./) for more details.
 pub struct Gc<T: Trace + ?Sized + 'static> {
-    ptr_root: Cell<NonZero<*const GcBox<T>>>,
+    ptr_root: Cell<Shared<GcBox<T>>>,
     marker: PhantomData<Rc<T>>,
 }
 
@@ -85,7 +83,7 @@ impl<T: Trace> Gc<T> {
             // heap no longer need to be rooted, so we unroot them.
             (*ptr.as_ptr()).value().unroot();
             let gc = Gc {
-                ptr_root: Cell::new(NonZero::new_unchecked(ptr.as_ptr())),
+                ptr_root: Cell::new(Shared::new_unchecked(ptr.as_ptr())),
                 marker: PhantomData,
             };
             gc.set_root();
@@ -95,22 +93,22 @@ impl<T: Trace> Gc<T> {
 }
 
 /// Returns the given pointer with its root bit cleared.
-unsafe fn clear_root_bit<T: ?Sized + Trace>(ptr: NonZero<*const GcBox<T>>)
-                                            -> NonZero<*const GcBox<T>> {
-    let mut ptr = ptr.get();
-    *(&mut ptr as *mut *const GcBox<T> as *mut usize) &= !1;
-    NonZero::new_unchecked(ptr)
+unsafe fn clear_root_bit<T: ?Sized + Trace>(ptr: Shared<GcBox<T>>) -> Shared<GcBox<T>> {
+    let mut ptr = ptr.as_ptr();
+    *(&mut ptr as *mut _ as *mut usize) &= !1;
+    // *(&mut ptr as *mut *const GcBox<T> as *mut usize) &= !1;
+    Shared::new_unchecked(ptr)
 }
 
 impl<T: Trace + ?Sized> Gc<T> {
     fn rooted(&self) -> bool {
-        self.ptr_root.get().get() as *const u8 as usize & 1 != 0
+        self.ptr_root.get().as_ptr() as *mut u8 as usize & 1 != 0
     }
 
     unsafe fn set_root(&self) {
-        let mut ptr = self.ptr_root.get().get();
-        *(&mut ptr as *mut *const GcBox<T> as *mut usize) |= 1;
-        self.ptr_root.set(NonZero::new_unchecked(ptr));
+        let mut ptr = self.ptr_root.get().as_ptr();
+        *(&mut ptr as *mut *mut GcBox<T> as *mut usize) |= 1;
+        self.ptr_root.set(Shared::new_unchecked(ptr));
     }
 
     unsafe fn clear_root(&self) {
@@ -127,7 +125,7 @@ impl<T: Trace + ?Sized> Gc<T> {
         // This assert exists just in case.
         assert!(finalizer_safe());
 
-        unsafe { &*clear_root_bit(self.ptr_root.get()).get() }
+        unsafe { &*clear_root_bit(self.ptr_root.get()).as_ptr() }
     }
 }
 
