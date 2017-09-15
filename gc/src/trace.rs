@@ -115,6 +115,53 @@ macro_rules! simple_empty_finalize_trace {
 
 simple_empty_finalize_trace![(), isize, usize, bool, i8, u8, i16, u16, i32, u32, i64, u64, f32, f64, char, String, Path, PathBuf];
 
+macro_rules! fn_finalize_trace_one {
+    ($ty:ty $(,$args:ident)*) => {
+        impl<Ret $(,$args)*> Finalize for $ty {}
+        unsafe impl<Ret $(,$args)*> Trace for $ty { unsafe_empty_trace!(); }
+    }
+}
+macro_rules! fn_finalize_trace_group {
+    () => {
+        fn_finalize_trace_one!(extern "Rust" fn () -> Ret);
+        fn_finalize_trace_one!(extern "C" fn () -> Ret);
+        fn_finalize_trace_one!(unsafe extern "Rust" fn () -> Ret);
+        fn_finalize_trace_one!(unsafe extern "C" fn () -> Ret);
+    };
+    ($($args:ident),*) => {
+        fn_finalize_trace_one!(extern "Rust" fn ($($args),*) -> Ret, $($args),*);
+        fn_finalize_trace_one!(extern "C" fn ($($args),*) -> Ret, $($args),*);
+        fn_finalize_trace_one!(extern "C" fn ($($args),*, ...) -> Ret, $($args),*);
+        fn_finalize_trace_one!(unsafe extern "Rust" fn ($($args),*) -> Ret, $($args),*);
+        fn_finalize_trace_one!(unsafe extern "C" fn ($($args),*) -> Ret, $($args),*);
+        fn_finalize_trace_one!(unsafe extern "C" fn ($($args),*, ...) -> Ret, $($args),*);
+    }
+}
+
+macro_rules! fn_finalize_trace {
+    ($(($($args:ident),*);)*) => {
+        $(
+            fn_finalize_trace_group!($($args),*);
+        )*
+    }
+}
+
+fn_finalize_trace![
+    ();
+    (A);
+    (A, B);
+    (A, B, C);
+    (A, B, C, D);
+    (A, B, C, D, E);
+    (A, B, C, D, E, F);
+    (A, B, C, D, E, F, G);
+    (A, B, C, D, E, F, G, H);
+    (A, B, C, D, E, F, G, H, I);
+    (A, B, C, D, E, F, G, H, I, J);
+    (A, B, C, D, E, F, G, H, I, J, K);
+    (A, B, C, D, E, F, G, H, I, J, K, L);
+];
+
 impl<T: Trace> Finalize for Box<T> {}
 unsafe impl<T: Trace> Trace for Box<T> {
     custom_trace!(this, {
