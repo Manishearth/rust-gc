@@ -19,7 +19,7 @@ impl<T: ?Sized> Shared<T> {
     }
 
     pub fn as_ptr(&self) -> *mut T {
-        self.p.get()
+        self.p
     }
 }
 
