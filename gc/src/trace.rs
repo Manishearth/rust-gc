@@ -1,5 +1,3 @@
-#[cfg_attr(nightly, feature(i128))]
-
 use std::collections::{BinaryHeap, BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use std::hash::Hash;
 use std::path::{Path, PathBuf};
@@ -118,7 +116,7 @@ macro_rules! simple_empty_finalize_trace {
 simple_empty_finalize_trace![(), isize, usize, bool, i8, u8, i16, u16, i32,
     u32, i64, u64, f32, f64, char, String, Path, PathBuf];
 
-#[cfg(nightly)]
+#[cfg(feature = "nightly")]
 simple_empty_finalize_trace![i128, u128];
 
 macro_rules! array_finalize_trace {
