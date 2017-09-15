@@ -113,7 +113,7 @@ macro_rules! simple_empty_finalize_trace {
     }
 }
 
-simple_empty_finalize_trace![(), isize, usize, bool, i8, u8, i16, u16, i32, u32, i64, u64, f32, f64, char, String, Path, PathBuf];
+simple_empty_finalize_trace![isize, usize, bool, i8, u8, i16, u16, i32, u32, i64, u64, f32, f64, char, String, Path, PathBuf];
 
 macro_rules! fn_finalize_trace_one {
     ($ty:ty $(,$args:ident)*) => {
@@ -138,15 +138,23 @@ macro_rules! fn_finalize_trace_group {
     }
 }
 
-macro_rules! fn_finalize_trace {
+macro_rules! tuple_finalize_trace {
+    ($($args:ident),*) => {
+        impl<$($args),*> Finalize for ($($args,)*) {}
+        unsafe impl<$($args),*> Trace for ($($args,)*) { unsafe_empty_trace!(); }
+    }
+}
+
+macro_rules! table_based_finalize_trace {
     ($(($($args:ident),*);)*) => {
         $(
             fn_finalize_trace_group!($($args),*);
+            tuple_finalize_trace!($($args),*);
         )*
     }
 }
 
-fn_finalize_trace![
+table_based_finalize_trace![
     ();
     (A);
     (A, B);
