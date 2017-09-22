@@ -1,4 +1,4 @@
-use std::collections::{BinaryHeap, BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
+use std::collections::{BinaryHeap, BTreeMap, BTreeSet, HashMap, HashSet, LinkedList, VecDeque};
 use std::hash::Hash;
 use std::path::{Path, PathBuf};
 
@@ -284,6 +284,15 @@ unsafe impl<K: Eq + Hash + Trace, V: Trace> Trace for HashMap<K, V> {
 
 impl<T: Eq + Hash + Trace> Finalize for HashSet<T> {}
 unsafe impl<T: Eq + Hash + Trace> Trace for HashSet<T> {
+    custom_trace!(this, {
+        for v in this.iter() {
+            mark(v);
+        }
+    });
+}
+
+impl<T: Eq + Hash + Trace> Finalize for LinkedList<T> {}
+unsafe impl<T: Eq + Hash + Trace> Trace for LinkedList<T> {
     custom_trace!(this, {
         for v in this.iter() {
             mark(v);
