@@ -10,7 +10,7 @@ use synstructure::BindStyle;
 #[proc_macro_derive(Trace, attributes(unsafe_ignore_trace))]
 pub fn derive_trace(input: TokenStream) -> TokenStream {
     let source = input.to_string();
-    let ast = syn::parse_macro_input(&source).unwrap();
+    let ast = syn::parse_derive_input(&source).unwrap();
 
     let trace = synstructure::each_field(&ast, &BindStyle::Ref.into(), |bi| {
         // Check if this field is annotated with an #[unsafe_ignore_trace]
@@ -80,7 +80,7 @@ pub fn derive_trace(input: TokenStream) -> TokenStream {
 #[proc_macro_derive(Finalize)]
 pub fn derive_finalize(input: TokenStream) -> TokenStream {
     let source = input.to_string();
-    let ast = syn::parse_macro_input(&source).unwrap();
+    let ast = syn::parse_derive_input(&source).unwrap();
 
     let name = &ast.ident;
     let (impl_generics, ty_generics, where_clause) = ast.generics.split_for_impl();
