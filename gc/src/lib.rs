@@ -6,6 +6,7 @@
 
 #![cfg_attr(feature = "nightly",
             feature(coerce_unsized,
+                    i128_type,
                     nonzero,
                     optin_builtin_traits,
                     shared,
