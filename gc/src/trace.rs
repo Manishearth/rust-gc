@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet, BinaryHeap, HashMap, HashSet, LinkedList, VecDeque};
 use std::hash::{BuildHasher, Hash};
+use std::marker::PhantomData;
 use std::num::{
     NonZeroI128, NonZeroI16, NonZeroI32, NonZeroI64, NonZeroI8, NonZeroIsize, NonZeroU128,
     NonZeroU16, NonZeroU32, NonZeroU64, NonZeroU8, NonZeroUsize,
@@ -340,6 +341,11 @@ unsafe impl<T: Eq + Hash + Trace> Trace for LinkedList<T> {
             mark(v);
         }
     });
+}
+
+impl<T> Finalize for PhantomData<T> {}
+unsafe impl<T> Trace for PhantomData<T> {
+    unsafe_empty_trace!();
 }
 
 impl<T: Trace> Finalize for VecDeque<T> {}
