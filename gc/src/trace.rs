@@ -1,5 +1,6 @@
 use std::collections::{BinaryHeap, BTreeMap, BTreeSet, HashMap, HashSet, LinkedList, VecDeque};
 use std::hash::Hash;
+use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 
 /// The Finalize trait. Can be specialized for a specific type to define
@@ -178,7 +179,7 @@ macro_rules! array_finalize_trace_impls {
         )*
     }
 }
-macro_rules! type_arg_tuple_based_finalized_trace_impls {
+macro_rules! type_arg_tuple_based_finalize_trace_impls {
     ($(($($args:ident),*);)*) => {
         $(
             fn_finalize_trace_group!($($args),*);
@@ -193,7 +194,7 @@ array_finalize_trace_impls![
     20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
     30, 31
 ];
-type_arg_tuple_based_finalized_trace_impls![
+type_arg_tuple_based_finalize_trace_impls![
     ();
     (A);
     (A, B);
