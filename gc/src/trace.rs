@@ -301,6 +301,11 @@ unsafe impl<T: Eq + Hash + Trace> Trace for LinkedList<T> {
     });
 }
 
+impl<T> Finalize for PhantomData<T> {}
+unsafe impl<T> Trace for PhantomData<T> {
+    unsafe_empty_trace!();
+}
+
 impl<T: Trace> Finalize for VecDeque<T> {}
 unsafe impl<T: Trace> Trace for VecDeque<T> {
     custom_trace!(this, {
