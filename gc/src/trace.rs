@@ -210,7 +210,7 @@ macro_rules! tuple_finalize_trace {
     }
 }
 
-macro_rules! type_arg_tuple_based_finalized_trace_impls {
+macro_rules! type_arg_tuple_based_finalize_trace_impls {
     ($(($($args:ident),*);)*) => {
         $(
             fn_finalize_trace_group!($($args),*);
@@ -219,7 +219,7 @@ macro_rules! type_arg_tuple_based_finalized_trace_impls {
     }
 }
 
-type_arg_tuple_based_finalized_trace_impls![
+type_arg_tuple_based_finalize_trace_impls![
     ();
     (A);
     (A, B);
