@@ -1,6 +1,7 @@
 use std::collections::{BinaryHeap, BTreeMap, BTreeSet, HashMap, HashSet, LinkedList, VecDeque};
 use std::hash::Hash;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicUsize};
 
 /// The Finalize trait. Can be specialized for a specific type to define
 /// finalization logic for that type.
@@ -114,7 +115,8 @@ macro_rules! simple_empty_finalize_trace {
 }
 
 simple_empty_finalize_trace![(), isize, usize, bool, i8, u8, i16, u16, i32,
-    u32, i64, u64, f32, f64, char, String, Path, PathBuf];
+    u32, i64, u64, f32, f64, char, String, Path, PathBuf, AtomicBool,
+    AtomicIsize, AtomicUsize];
 
 #[cfg(feature = "nightly")]
 simple_empty_finalize_trace![i128, u128];
