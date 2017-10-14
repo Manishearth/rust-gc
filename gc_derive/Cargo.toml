@@ -1,6 +1,6 @@
 [package]
 name = "gc_derive"
-version = "0.3.1"
+version = "0.3.2"
 authors = ["Manish Goregaokar <manishsmail@gmail.com>", "Michael Layzell <michael@thelayzells.com>"]
 
 description = "Garbage collector derive plugin for rust-gc"
@@ -16,4 +16,4 @@ proc-macro = true
 [dependencies]
 syn = "0.11"
 quote = "0.3"
-synstructure = "0.5"
+synstructure = "0.6"
