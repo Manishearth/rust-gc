@@ -1,0 +1,5 @@
+[workspace]
+members = [
+    "gc",
+    "gc_derive",
+]

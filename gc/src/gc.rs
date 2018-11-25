@@ -1,11 +1,8 @@
 use std::cell::{Cell, RefCell};
 use std::mem;
+use std::ptr::NonNull;
 use trace::{Finalize, Trace};
 
-#[cfg(feature = "nightly")]
-use std::ptr::Shared;
-#[cfg(not(feature = "nightly"))]
-use stable::Shared;
 
 const INITIAL_THRESHOLD: usize = 100;
 
@@ -18,7 +15,7 @@ const USED_SPACE_RATIO: f64 = 0.7;
 struct GcState {
     bytes_allocated: usize,
     threshold: usize,
-    boxes_start: Option<Shared<GcBox<Trace>>>,
+    boxes_start: Option<NonNull<GcBox<Trace>>>,
 }
 
 impl Drop for GcState {
@@ -72,7 +69,7 @@ pub struct GcBoxHeader {
     // We are using a word word bool - there is a full 63 bits of unused data :(
     // XXX: Should be able to store marked in the high bit of roots?
     roots: Cell<usize>,
-    next: Option<Shared<GcBox<Trace>>>,
+    next: Option<NonNull<GcBox<Trace>>>,
     marked: Cell<bool>,
 }
 
@@ -86,7 +83,7 @@ impl<T: Trace> GcBox<T> {
     /// and appends it to the thread-local `GcBox` chain.
     ///
     /// A `GcBox` allocated this way starts its life rooted.
-    pub fn new(value: T) -> Shared<Self> {
+    pub fn new(value: T) -> NonNull<Self> {
         GC_STATE.with(|st| {
             let mut st = st.borrow_mut();
 
@@ -111,13 +108,13 @@ impl<T: Trace> GcBox<T> {
                 data: value,
             }));
 
-            st.boxes_start = Some(unsafe { Shared::new_unchecked(gcbox) });
+            st.boxes_start = Some(unsafe { NonNull::new_unchecked(gcbox) });
 
             // We allocated some bytes! Let's record it
             st.bytes_allocated += mem::size_of::<GcBox<T>>();
 
             // Return the pointer to the newly allocated data
-            unsafe { Shared::new_unchecked(gcbox) }
+            unsafe { NonNull::new_unchecked(gcbox) }
         })
     }
 }
@@ -155,10 +152,10 @@ impl<T: Trace + ?Sized> GcBox<T> {
 /// Collects garbage.
 fn collect_garbage(st: &mut GcState) {
     struct Unmarked {
-        incoming: *mut Option<Shared<GcBox<Trace>>>,
-        this: Shared<GcBox<Trace>>,
+        incoming: *mut Option<NonNull<GcBox<Trace>>>,
+        this: NonNull<GcBox<Trace>>,
     }
-    unsafe fn mark(head: &mut Option<Shared<GcBox<Trace>>>) -> Vec<Unmarked> {
+    unsafe fn mark(head: &mut Option<NonNull<GcBox<Trace>>>) -> Vec<Unmarked> {
         // Walk the tree, tracing and marking the nodes
         let mut mark_head = *head;
         while let Some(node) = mark_head {
