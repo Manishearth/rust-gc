@@ -6,10 +6,7 @@
 
 #![cfg_attr(feature = "nightly",
             feature(coerce_unsized,
-                    i128_type,
-                    nonzero,
                     optin_builtin_traits,
-                    shared,
                     unsize,
                     specialization))]
 
@@ -20,6 +17,7 @@ use std::fmt::{self, Debug, Display};
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
 use std::mem;
+use std::ptr::NonNull;
 use std::ops::{Deref, DerefMut};
 use std::rc::Rc;
 
@@ -27,13 +25,6 @@ use std::rc::Rc;
 use std::marker::Unsize;
 #[cfg(feature = "nightly")]
 use std::ops::CoerceUnsized;
-#[cfg(feature = "nightly")]
-use std::ptr::Shared;
-
-#[cfg(not(feature = "nightly"))]
-mod stable;
-#[cfg(not(feature = "nightly"))]
-use stable::Shared;
 
 mod gc;
 mod trace;
@@ -51,7 +42,7 @@ pub use gc::{force_collect, finalizer_safe};
 ///
 /// See the [module level documentation](./) for more details.
 pub struct Gc<T: Trace + ?Sized + 'static> {
-    ptr_root: Cell<Shared<GcBox<T>>>,
+    ptr_root: Cell<NonNull<GcBox<T>>>,
     marker: PhantomData<Rc<T>>,
 }
 
@@ -84,7 +75,7 @@ impl<T: Trace> Gc<T> {
             // heap no longer need to be rooted, so we unroot them.
             (*ptr.as_ptr()).value().unroot();
             let gc = Gc {
-                ptr_root: Cell::new(Shared::new_unchecked(ptr.as_ptr())),
+                ptr_root: Cell::new(NonNull::new_unchecked(ptr.as_ptr())),
                 marker: PhantomData,
             };
             gc.set_root();
@@ -94,11 +85,11 @@ impl<T: Trace> Gc<T> {
 }
 
 /// Returns the given pointer with its root bit cleared.
-unsafe fn clear_root_bit<T: ?Sized + Trace>(ptr: Shared<GcBox<T>>) -> Shared<GcBox<T>> {
+unsafe fn clear_root_bit<T: ?Sized + Trace>(ptr: NonNull<GcBox<T>>) -> NonNull<GcBox<T>> {
     let mut ptr = ptr.as_ptr();
     *(&mut ptr as *mut _ as *mut usize) &= !1;
     // *(&mut ptr as *mut *const GcBox<T> as *mut usize) &= !1;
-    Shared::new_unchecked(ptr)
+    NonNull::new_unchecked(ptr)
 }
 
 impl<T: Trace + ?Sized> Gc<T> {
@@ -109,7 +100,7 @@ impl<T: Trace + ?Sized> Gc<T> {
     unsafe fn set_root(&self) {
         let mut ptr = self.ptr_root.get().as_ptr();
         *(&mut ptr as *mut *mut GcBox<T> as *mut usize) |= 1;
-        self.ptr_root.set(Shared::new_unchecked(ptr));
+        self.ptr_root.set(NonNull::new_unchecked(ptr));
     }
 
     unsafe fn clear_root(&self) {
@@ -393,7 +384,7 @@ impl<T: Trace> GcCell<T> {
     /// Consumes the `GcCell`, returning the wrapped value.
     #[inline]
     pub fn into_inner(self) -> T {
-        unsafe { self.cell.into_inner() }
+        self.cell.into_inner()
     }
 }
 
