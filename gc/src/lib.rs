@@ -17,7 +17,7 @@ use std::fmt::{self, Debug, Display};
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
 use std::mem;
-use std::ptr::{self, NonNull};
+use std::ptr::NonNull;
 use std::ops::{Deref, DerefMut};
 use std::rc::Rc;
 
