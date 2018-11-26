@@ -17,7 +17,7 @@ use std::fmt::{self, Debug, Display};
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
 use std::mem;
-use std::ptr::NonNull;
+use std::ptr::{self, NonNull};
 use std::ops::{Deref, DerefMut};
 use std::rc::Rc;
 
@@ -118,6 +118,14 @@ impl<T: Trace + ?Sized> Gc<T> {
         assert!(finalizer_safe());
 
         unsafe { &*clear_root_bit(self.ptr_root.get()).as_ptr() }
+    }
+}
+
+impl<T: Trace + ?Sized> Gc<T> {
+    pub fn into_raw(this: Self) -> *const T {
+        let ptr: *const T = &*this;
+        mem::forget(this);
+        ptr
     }
 }
 
