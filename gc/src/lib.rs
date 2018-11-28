@@ -136,7 +136,7 @@ impl<T: Trace + ?Sized> Gc<T> {
     /// use gc::Gc;
     /// 
     /// let x = Gc::new(22);
-    /// let x_ptr = Gc::from_raw(x);
+    /// let x_ptr = Gc::into_raw(x);
     /// assert_eq!(unsafe { *x_ptr }, 22);
     /// ```
     pub fn into_raw(this: Self) -> *const T {
