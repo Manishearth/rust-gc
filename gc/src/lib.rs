@@ -123,12 +123,57 @@ impl<T: Trace + ?Sized> Gc<T> {
 }
 
 impl<T: Trace + ?Sized> Gc<T> {
+    /// Consumes the `Gc`, returning the wrapped pointer.
+    /// 
+    /// To avoid a memory leak, the pointer must be converted back into a `Gc`
+    /// using [`Gc::from_raw`][from_raw].
+    /// 
+    /// [from_raw]: struct.Gc.html#method.from_raw
+    /// 
+    /// # Examples
+    /// 
+    /// ```
+    /// use gc::Gc;
+    /// 
+    /// let x = Gc::new(22);
+    /// let x_ptr = Gc::from_raw(x);
+    /// assert_eq!(unsafe { *x_ptr }, 22);
+    /// ```
     pub fn into_raw(this: Self) -> *const T {
         let ptr: *const T = &*this;
         mem::forget(this);
         ptr
     }
 
+    /// Constructs an `Gc` from a raw pointer.
+    ///
+    /// The raw pointer must have been previously returned by a call to a
+    /// [`Gc::into_raw`][into_raw].
+    ///
+    /// This function is unsafe because improper use may lead to memory
+    /// problems. For example, a double-free may occur if the function is called
+    /// twice on the same raw pointer.
+    ///
+    /// [into_raw]: struct.Gc.html#method.into_raw
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use gc::Gc;
+    ///
+    /// let x = Gc::new(22);
+    /// let x_ptr = Gc::into_raw(x);
+    ///
+    /// unsafe {
+    ///     // Convert back to an `Gc` to prevent leak.
+    ///     let x = Gc::from_raw(x_ptr);
+    ///     assert_eq!(*x, 22);
+    ///
+    ///     // Further calls to `Gc::from_raw(x_ptr)` would be memory unsafe.
+    /// }
+    ///
+    /// // The memory was freed when `x` went out of scope above, so `x_ptr` is now dangling!
+    /// ```
     pub unsafe fn from_raw(ptr: *const T) -> Self {
         // Align the unsized value to the end of the GcBox.
         // Because it is ?Sized, it will always be the last field in memory.
