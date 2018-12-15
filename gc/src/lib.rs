@@ -151,8 +151,8 @@ impl<T: Trace + ?Sized> Gc<T> {
     /// [`Gc::into_raw`][into_raw].
     ///
     /// This function is unsafe because improper use may lead to memory
-    /// problems. For example, a double-free may occur if the function is called
-    /// twice on the same raw pointer.
+    /// problems. For example, a use-after-free will occur if the function is
+    /// called twice on the same raw pointer.
     ///
     /// [into_raw]: struct.Gc.html#method.into_raw
     ///
