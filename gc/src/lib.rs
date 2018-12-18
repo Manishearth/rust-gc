@@ -4,22 +4,21 @@
 //! It is marked as non-sendable because the garbage collection only occurs
 //! thread-locally.
 
-#![cfg_attr(feature = "nightly",
-            feature(coerce_unsized,
-                    optin_builtin_traits,
-                    unsize,
-                    specialization))]
+#![cfg_attr(
+    feature = "nightly",
+    feature(coerce_unsized, optin_builtin_traits, unsize, specialization)
+)]
 
 use gc::GcBox;
-use std::alloc::{Layout};
+use std::alloc::Layout;
 use std::cell::{Cell, UnsafeCell};
 use std::cmp::Ordering;
 use std::fmt::{self, Debug, Display};
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
 use std::mem::{self, align_of_val};
-use std::ptr::{self, NonNull};
 use std::ops::{Deref, DerefMut};
+use std::ptr::{self, NonNull};
 use std::rc::Rc;
 
 #[cfg(feature = "nightly")]
@@ -32,8 +31,8 @@ mod trace;
 
 // We re-export the Trace method, as well as some useful internal methods for
 // managing collections or configuring the garbage collector.
+pub use gc::{finalizer_safe, force_collect};
 pub use trace::{Finalize, Trace};
-pub use gc::{force_collect, finalizer_safe};
 
 ////////
 // Gc //
@@ -124,17 +123,17 @@ impl<T: Trace + ?Sized> Gc<T> {
 
 impl<T: Trace + ?Sized> Gc<T> {
     /// Consumes the `Gc`, returning the wrapped pointer.
-    /// 
+    ///
     /// To avoid a memory leak, the pointer must be converted back into a `Gc`
     /// using [`Gc::from_raw`][from_raw].
-    /// 
+    ///
     /// [from_raw]: struct.Gc.html#method.from_raw
-    /// 
+    ///
     /// # Examples
-    /// 
+    ///
     /// ```
     /// use gc::Gc;
-    /// 
+    ///
     /// let x = Gc::new(22);
     /// let x_ptr = Gc::into_raw(x);
     /// assert_eq!(unsafe { *x_ptr }, 22);
@@ -172,7 +171,8 @@ impl<T: Trace + ?Sized> Gc<T> {
     ///     // Further calls to `Gc::from_raw(x_ptr)` would be memory unsafe.
     /// }
     ///
-    /// // The memory was freed when `x` went out of scope above, so `x_ptr` is now dangling!
+    /// // The memory can be freed at any time after `x` went out of scope above
+    /// // (when the collector is run), which would result in `x_ptr` dangling!
     /// ```
     pub unsafe fn from_raw(ptr: *const T) -> Self {
         // Align the unsized value to the end of the GcBox.
@@ -432,7 +432,6 @@ impl BorrowFlag {
     }
 }
 
-
 /// A mutable memory location with dynamically checked borrow rules
 /// that can be used inside of a garbage-collected pointer.
 ///
@@ -560,7 +559,6 @@ unsafe impl<T: Trace + ?Sized> Trace for GcCell<T> {
     }
 }
 
-
 /// A wrapper type for an immutably borrowed value from a `GcCell<T>`.
 pub struct GcCellRef<'a, T: Trace + ?Sized + 'static> {
     flags: &'a Cell<BorrowFlag>,
@@ -588,7 +586,6 @@ impl<'a, T: Trace + ?Sized + Debug> Debug for GcCellRef<'a, T> {
         Debug::fmt(&**self, f)
     }
 }
-
 
 /// A wrapper type for a mutably borrowed value from a `GcCell<T>`.
 pub struct GcCellRefMut<'a, T: Trace + ?Sized + 'static> {
@@ -632,7 +629,6 @@ impl<'a, T: Trace + ?Sized + Debug> Debug for GcCellRefMut<'a, T> {
         Debug::fmt(&*(self.deref()), f)
     }
 }
-
 
 unsafe impl<T: ?Sized + Send> Send for GcCell<T> {}
 
@@ -701,16 +697,14 @@ impl<T: Trace + ?Sized + Ord> Ord for GcCell<T> {
 impl<T: Trace + ?Sized + Debug> Debug for GcCell<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self.flags.get().borrowed() {
-            BorrowState::Unused | BorrowState::Reading => {
-                f.debug_struct("GcCell")
-                    .field("value", &self.borrow())
-                    .finish()
-            }
-            BorrowState::Writing => {
-                f.debug_struct("GcCell")
-                    .field("value", &"<borrowed>")
-                    .finish()
-            }
+            BorrowState::Unused | BorrowState::Reading => f
+                .debug_struct("GcCell")
+                .field("value", &self.borrow())
+                .finish(),
+            BorrowState::Writing => f
+                .debug_struct("GcCell")
+                .field("value", &"<borrowed>")
+                .finish(),
         }
     }
 }
@@ -731,5 +725,9 @@ fn padding_needed_for_gc(align: usize) -> usize {
     // `align - 1` is a mask of all bits less than the alignment,
     // as `align` is a power-of-two.
     let misaligned = mem::size_of::<GcBox<()>>() & (align - 1);
-    if misaligned > 0 { align - misaligned } else { 0 }
+    if misaligned > 0 {
+        align - misaligned
+    } else {
+        0
+    }
 }
