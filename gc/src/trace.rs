@@ -63,7 +63,7 @@ macro_rules! custom_trace {
         #[inline]
         unsafe fn trace(&self) {
             #[inline]
-            unsafe fn mark<T: $crate::Trace>(it: &T) {
+            unsafe fn mark<T: $crate::Trace + ?Sized>(it: &T) {
                 $crate::Trace::trace(it);
             }
             let $this = self;
@@ -72,7 +72,7 @@ macro_rules! custom_trace {
         #[inline]
         unsafe fn root(&self) {
             #[inline]
-            unsafe fn mark<T: $crate::Trace>(it: &T) {
+            unsafe fn mark<T: $crate::Trace + ?Sized>(it: &T) {
                 $crate::Trace::root(it);
             }
             let $this = self;
@@ -81,7 +81,7 @@ macro_rules! custom_trace {
         #[inline]
         unsafe fn unroot(&self) {
             #[inline]
-            unsafe fn mark<T: $crate::Trace>(it: &T) {
+            unsafe fn mark<T: $crate::Trace + ?Sized>(it: &T) {
                 $crate::Trace::unroot(it);
             }
             let $this = self;
@@ -91,7 +91,7 @@ macro_rules! custom_trace {
         fn finalize_glue(&self) {
             $crate::Finalize::finalize(self);
             #[inline]
-            fn mark<T: $crate::Trace>(it: &T) {
+            fn mark<T: $crate::Trace + ?Sized>(it: &T) {
                 $crate::Trace::finalize_glue(it);
             }
             let $this = self;
@@ -211,8 +211,8 @@ type_arg_tuple_based_finalized_trace_impls![
     (A, B, C, D, E, F, G, H, I, J, K, L);
 ];
 
-impl<T: Trace> Finalize for Box<T> {}
-unsafe impl<T: Trace> Trace for Box<T> {
+impl<T: Trace + ?Sized> Finalize for Box<T> {}
+unsafe impl<T: Trace + ?Sized> Trace for Box<T> {
     custom_trace!(this, {
         mark(&**this);
     });
