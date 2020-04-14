@@ -82,6 +82,11 @@ impl<T: Trace> Gc<T> {
             gc
         }
     }
+
+    /// Returns `true` if the two `Gc`s point to the same allocation.
+    pub fn ptr_eq(this: &Gc<T>, other: &Gc<T>) -> bool {
+        this.ptr_root.get().as_ptr() == other.ptr_root.get().as_ptr()
+    }
 }
 
 /// Returns the given pointer with its root bit cleared.
