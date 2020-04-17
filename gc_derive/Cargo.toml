@@ -14,7 +14,7 @@ name = "gc_derive"
 proc-macro = true
 
 [dependencies]
-syn = "0.15"
-proc-macro2 = "0.4"
-quote = "0.6"
-synstructure = "0.10"
+syn = "1.0"
+proc-macro2 = "1.0"
+quote = "1.0"
+synstructure = "0.12"

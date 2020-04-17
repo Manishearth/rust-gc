@@ -4,8 +4,8 @@
 extern crate gc_derive;
 extern crate gc;
 
+use gc::{Finalize, Trace};
 use std::cell::Cell;
-use gc::Finalize;
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
 struct Flags(i32, i32);
@@ -39,6 +39,9 @@ impl Finalize for B {
         });
     }
 }
+
+#[derive(Trace, Finalize)]
+struct X(Box<dyn Trace>);
 
 #[test]
 fn drop_triggers_finalize() {
