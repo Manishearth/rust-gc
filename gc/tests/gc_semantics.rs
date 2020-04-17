@@ -4,9 +4,9 @@
 extern crate gc_derive;
 extern crate gc;
 
-use gc::{force_collect, Finalize, Gc, GcCell, Trace};
 use std::cell::Cell;
 use std::thread::LocalKey;
+use gc::{Trace, Finalize, GcCell, Gc, force_collect};
 
 // Utility methods for the tests
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]

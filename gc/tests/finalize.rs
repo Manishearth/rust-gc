@@ -4,7 +4,7 @@
 extern crate gc_derive;
 extern crate gc;
 
-use gc::Finalize;
+use gc::{Finalize, Trace};
 use std::cell::Cell;
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
