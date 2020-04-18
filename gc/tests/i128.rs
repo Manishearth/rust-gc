@@ -1,7 +1,3 @@
-#![cfg_attr(feature = "nightly", feature(i128_type))]
-
-extern crate gc;
-
 use gc::Gc;
 
 #[test]

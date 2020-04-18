@@ -1,14 +1,9 @@
-extern crate proc_macro;
-extern crate syn;
-#[macro_use]
-extern crate synstructure;
-#[macro_use]
-extern crate quote;
-extern crate proc_macro2;
+use synstructure::{decl_derive, Structure};
+use quote::quote;
 
 decl_derive!([Trace, attributes(unsafe_ignore_trace)] => derive_trace);
 
-fn derive_trace(mut s: synstructure::Structure) -> proc_macro2::TokenStream {
+fn derive_trace(mut s: Structure<'_>) -> proc_macro2::TokenStream {
     s.filter(|bi| !bi.ast().attrs.iter().any(|attr| attr.path.is_ident("unsafe_ignore_trace")));
     let trace_body = s.each(|bi| quote!(mark(#bi)));
 
@@ -67,6 +62,6 @@ fn derive_trace(mut s: synstructure::Structure) -> proc_macro2::TokenStream {
 
 decl_derive!([Finalize] => derive_finalize);
 
-fn derive_finalize(s: synstructure::Structure) -> proc_macro2::TokenStream {
+fn derive_finalize(s: Structure<'_>) -> proc_macro2::TokenStream {
     s.unbound_impl(quote!(::gc::Finalize), quote!())
 }

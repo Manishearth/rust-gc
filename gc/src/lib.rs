@@ -9,7 +9,7 @@
     feature(coerce_unsized, optin_builtin_traits, unsize, specialization)
 )]
 
-use gc::GcBox;
+use crate::gc::GcBox;
 use std::alloc::Layout;
 use std::cell::{Cell, UnsafeCell};
 use std::cmp::Ordering;
@@ -31,8 +31,8 @@ mod trace;
 
 // We re-export the Trace method, as well as some useful internal methods for
 // managing collections or configuring the garbage collector.
-pub use gc::{finalizer_safe, force_collect};
-pub use trace::{Finalize, Trace};
+pub use crate::gc::{finalizer_safe, force_collect};
+pub use crate::trace::{Finalize, Trace};
 
 ////////
 // Gc //
@@ -283,11 +283,6 @@ impl<T: Trace + ?Sized + PartialEq> PartialEq for Gc<T> {
     fn eq(&self, other: &Self) -> bool {
         **self == **other
     }
-
-    #[inline(always)]
-    fn ne(&self, other: &Self) -> bool {
-        **self != **other
-    }
 }
 
 impl<T: Trace + ?Sized + Eq> Eq for Gc<T> {}
@@ -333,19 +328,19 @@ impl<T: Trace + ?Sized + Hash> Hash for Gc<T> {
 }
 
 impl<T: Trace + ?Sized + Display> Display for Gc<T> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         Display::fmt(&**self, f)
     }
 }
 
 impl<T: Trace + ?Sized + Debug> Debug for Gc<T> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         Debug::fmt(&**self, f)
     }
 }
 
 impl<T: Trace> fmt::Pointer for Gc<T> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Pointer::fmt(&self.inner(), f)
     }
 }
@@ -473,7 +468,7 @@ impl<T: Trace + ?Sized> GcCell<T> {
     ///
     /// Panics if the value is currently mutably borrowed.
     #[inline]
-    pub fn borrow(&self) -> GcCellRef<T> {
+    pub fn borrow(&self) -> GcCellRef<'_, T> {
         if self.flags.get().borrowed() == BorrowState::Writing {
             panic!("GcCell<T> already mutably borrowed");
         }
@@ -500,7 +495,7 @@ impl<T: Trace + ?Sized> GcCell<T> {
     ///
     /// Panics if the value is currently borrowed.
     #[inline]
-    pub fn borrow_mut(&self) -> GcCellRefMut<T> {
+    pub fn borrow_mut(&self) -> GcCellRefMut<'_, T> {
         if self.flags.get().borrowed() != BorrowState::Unused {
             panic!("GcCell<T> already borrowed");
         }
@@ -587,7 +582,7 @@ impl<'a, T: Trace + ?Sized> Drop for GcCellRef<'a, T> {
 }
 
 impl<'a, T: Trace + ?Sized + Debug> Debug for GcCellRef<'a, T> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         Debug::fmt(&**self, f)
     }
 }
@@ -630,7 +625,7 @@ impl<'a, T: Trace + ?Sized> Drop for GcCellRefMut<'a, T> {
 }
 
 impl<'a, T: Trace + ?Sized + Debug> Debug for GcCellRefMut<'a, T> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         Debug::fmt(&*(self.deref()), f)
     }
 }
@@ -655,11 +650,6 @@ impl<T: Trace + ?Sized + PartialEq> PartialEq for GcCell<T> {
     #[inline(always)]
     fn eq(&self, other: &Self) -> bool {
         *self.borrow() == *other.borrow()
-    }
-
-    #[inline(always)]
-    fn ne(&self, other: &Self) -> bool {
-        *self.borrow() != *other.borrow()
     }
 }
 
@@ -700,7 +690,7 @@ impl<T: Trace + ?Sized + Ord> Ord for GcCell<T> {
 }
 
 impl<T: Trace + ?Sized + Debug> Debug for GcCell<T> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.flags.get().borrowed() {
             BorrowState::Unused | BorrowState::Reading => f
                 .debug_struct("GcCell")

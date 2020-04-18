@@ -1,8 +1,6 @@
 #![cfg_attr(feature = "nightly", feature(specialization))]
 
-#[macro_use]
-extern crate gc_derive;
-extern crate gc;
+use gc_derive::{Trace, Finalize};
 use std::cell::RefCell;
 
 thread_local!(static X: RefCell<u8> = RefCell::new(0));
@@ -16,7 +14,7 @@ unsafe impl Trace for Foo {
     unsafe fn trace(&self) {
         X.with(|x| {
             let mut m = x.borrow_mut();
-            *m = *m + 1;
+            *m += 1;
         })
     }
     unsafe fn root(&self) {}

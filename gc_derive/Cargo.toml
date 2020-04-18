@@ -8,6 +8,7 @@ repository = "https://github.com/Manishearth/rust-gc"
 readme = "../README.md"
 license = "MPL-2.0"
 keywords = ["garbage", "macro", "memory"]
+edition = "2018"
 
 [lib]
 name = "gc_derive"
