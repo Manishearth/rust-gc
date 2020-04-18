@@ -1,5 +1,5 @@
-use std::collections::{BinaryHeap, BTreeMap, BTreeSet, HashMap, HashSet, LinkedList, VecDeque};
-use std::hash::{Hash, BuildHasher};
+use std::collections::{BTreeMap, BTreeSet, BinaryHeap, HashMap, HashSet, LinkedList, VecDeque};
+use std::hash::{BuildHasher, Hash};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicUsize};
 
@@ -114,9 +114,29 @@ macro_rules! simple_empty_finalize_trace {
     }
 }
 
-simple_empty_finalize_trace![(), isize, usize, bool, i8, u8, i16, u16, i32,
-    u32, i64, u64, f32, f64, char, String, Path, PathBuf, AtomicBool,
-    AtomicIsize, AtomicUsize];
+simple_empty_finalize_trace![
+    (),
+    isize,
+    usize,
+    bool,
+    i8,
+    u8,
+    i16,
+    u16,
+    i32,
+    u32,
+    i64,
+    u64,
+    f32,
+    f64,
+    char,
+    String,
+    Path,
+    PathBuf,
+    AtomicBool,
+    AtomicIsize,
+    AtomicUsize
+];
 
 simple_empty_finalize_trace![i128, u128];
 
@@ -130,7 +150,7 @@ macro_rules! array_finalize_trace {
                 }
             });
         }
-    }
+    };
 }
 
 macro_rules! fn_finalize_trace_one {
@@ -189,10 +209,8 @@ macro_rules! type_arg_tuple_based_finalized_trace_impls {
 }
 
 array_finalize_trace_impls![
-     0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
-    10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
-    20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
-    30, 31
+    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+    26, 27, 28, 29, 30, 31
 ];
 type_arg_tuple_based_finalized_trace_impls![
     ();

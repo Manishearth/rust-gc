@@ -1,9 +1,9 @@
 #![cfg_attr(feature = "nightly", feature(specialization))]
 
+use gc::{force_collect, Finalize, Gc, GcCell, Trace};
+use gc_derive::{Finalize, Trace};
 use std::cell::Cell;
 use std::thread::LocalKey;
-use gc::{Trace, Finalize, GcCell, Gc, force_collect};
-use gc_derive::{Trace, Finalize};
 
 // Utility methods for the tests
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]

@@ -1,6 +1,6 @@
 #![cfg_attr(feature = "nightly", feature(specialization))]
 
-use gc_derive::{Trace, Finalize};
+use gc_derive::{Finalize, Trace};
 use std::cell::RefCell;
 
 thread_local!(static X: RefCell<u8> = RefCell::new(0));
