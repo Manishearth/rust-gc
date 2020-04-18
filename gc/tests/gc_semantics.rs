@@ -1,12 +1,9 @@
 #![cfg_attr(feature = "nightly", feature(specialization))]
 
-#[macro_use]
-extern crate gc_derive;
-extern crate gc;
-
 use std::cell::Cell;
 use std::thread::LocalKey;
 use gc::{Trace, Finalize, GcCell, Gc, force_collect};
+use gc_derive::{Trace, Finalize};
 
 // Utility methods for the tests
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
@@ -21,11 +18,11 @@ struct GcWatchFlags {
 impl GcWatchFlags {
     fn new(trace: i32, root: i32, unroot: i32, drop: i32, finalize: i32) -> GcWatchFlags {
         GcWatchFlags {
-            trace: trace,
-            root: root,
-            unroot: unroot,
-            drop: drop,
-            finalize: finalize,
+            trace,
+            root,
+            unroot,
+            drop,
+            finalize,
         }
     }
 

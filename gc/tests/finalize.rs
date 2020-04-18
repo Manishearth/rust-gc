@@ -1,10 +1,7 @@
 #![cfg_attr(feature = "nightly", feature(specialization))]
 
-#[macro_use]
-extern crate gc_derive;
-extern crate gc;
-
 use gc::{Finalize, Trace};
+use gc_derive::{Trace, Finalize};
 use std::cell::Cell;
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]

@@ -1,7 +1,7 @@
 use std::cell::{Cell, RefCell};
 use std::mem;
 use std::ptr::NonNull;
-use trace::{Finalize, Trace};
+use crate::trace::{Finalize, Trace};
 
 
 const INITIAL_THRESHOLD: usize = 100;
@@ -15,7 +15,7 @@ const USED_SPACE_RATIO: f64 = 0.7;
 struct GcState {
     bytes_allocated: usize,
     threshold: usize,
-    boxes_start: Option<NonNull<GcBox<Trace>>>,
+    boxes_start: Option<NonNull<GcBox<dyn Trace>>>,
 }
 
 impl Drop for GcState {
@@ -38,8 +38,8 @@ impl Drop for GcState {
     }
 }
 
-/// Whether or not the thread is currently in the sweep phase of garbage collection.
-/// During this phase, attempts to dereference a `Gc<T>` pointer will trigger a panic.
+// Whether or not the thread is currently in the sweep phase of garbage collection.
+// During this phase, attempts to dereference a `Gc<T>` pointer will trigger a panic.
 thread_local!(pub static GC_DROPPING: Cell<bool> = Cell::new(false));
 struct DropGuard;
 impl DropGuard {
@@ -57,23 +57,23 @@ pub fn finalizer_safe() -> bool {
     GC_DROPPING.with(|dropping| !dropping.get())
 }
 
-/// The garbage collector's internal state.
+// The garbage collector's internal state.
 thread_local!(static GC_STATE: RefCell<GcState> = RefCell::new(GcState {
     bytes_allocated: 0,
     threshold: INITIAL_THRESHOLD,
     boxes_start: None,
 }));
 
-pub struct GcBoxHeader {
+pub(crate) struct GcBoxHeader {
     // XXX This is horribly space inefficient - not sure if we care
     // We are using a word word bool - there is a full 63 bits of unused data :(
     // XXX: Should be able to store marked in the high bit of roots?
     roots: Cell<usize>,
-    next: Option<NonNull<GcBox<Trace>>>,
+    next: Option<NonNull<GcBox<dyn Trace>>>,
     marked: Cell<bool>,
 }
 
-pub struct GcBox<T: Trace + ?Sized + 'static> {
+pub(crate) struct GcBox<T: Trace + ?Sized + 'static> {
     header: GcBoxHeader,
     data: T,
 }
@@ -83,7 +83,7 @@ impl<T: Trace> GcBox<T> {
     /// and appends it to the thread-local `GcBox` chain.
     ///
     /// A `GcBox` allocated this way starts its life rooted.
-    pub fn new(value: T) -> NonNull<Self> {
+    pub(crate) fn new(value: T) -> NonNull<Self> {
         GC_STATE.with(|st| {
             let mut st = st.borrow_mut();
 
@@ -121,7 +121,7 @@ impl<T: Trace> GcBox<T> {
 
 impl<T: Trace + ?Sized> GcBox<T> {
     /// Marks this `GcBox` and marks through its data.
-    pub unsafe fn trace_inner(&self) {
+    pub(crate) unsafe fn trace_inner(&self) {
         let marked = self.header.marked.get();
         if !marked {
             self.header.marked.set(true);
@@ -131,7 +131,7 @@ impl<T: Trace + ?Sized> GcBox<T> {
 
     /// Increases the root count on this `GcBox`.
     /// Roots prevent the `GcBox` from being destroyed by the garbage collector.
-    pub unsafe fn root_inner(&self) {
+    pub(crate) unsafe fn root_inner(&self) {
         // abort if the count overflows to prevent `mem::forget` loops that could otherwise lead to
         // erroneous drops
         self.header.roots.set(self.header.roots.get().checked_add(1).unwrap());
@@ -139,12 +139,12 @@ impl<T: Trace + ?Sized> GcBox<T> {
 
     /// Decreases the root count on this `GcBox`.
     /// Roots prevent the `GcBox` from being destroyed by the garbage collector.
-    pub unsafe fn unroot_inner(&self) {
+    pub(crate) unsafe fn unroot_inner(&self) {
         self.header.roots.set(self.header.roots.get() - 1);
     }
 
     /// Returns a reference to the `GcBox`'s value.
-    pub fn value(&self) -> &T {
+    pub(crate) fn value(&self) -> &T {
         &self.data
     }
 }
@@ -152,10 +152,10 @@ impl<T: Trace + ?Sized> GcBox<T> {
 /// Collects garbage.
 fn collect_garbage(st: &mut GcState) {
     struct Unmarked {
-        incoming: *mut Option<NonNull<GcBox<Trace>>>,
-        this: NonNull<GcBox<Trace>>,
+        incoming: *mut Option<NonNull<GcBox<dyn Trace>>>,
+        this: NonNull<GcBox<dyn Trace>>,
     }
-    unsafe fn mark(head: &mut Option<NonNull<GcBox<Trace>>>) -> Vec<Unmarked> {
+    unsafe fn mark(head: &mut Option<NonNull<GcBox<dyn Trace>>>) -> Vec<Unmarked> {
         // Walk the tree, tracing and marking the nodes
         let mut mark_head = *head;
         while let Some(node) = mark_head {

@@ -1,11 +1,8 @@
 #![cfg_attr(feature = "nightly", feature(specialization))]
 
-#[macro_use]
-extern crate gc_derive;
-extern crate gc;
-
 use std::cell::Cell;
 use gc::{GcCell, Gc, force_collect};
+use gc_derive::Trace;
 
 thread_local!(static COUNTER: Cell<u8> = Cell::new(0u8));
 

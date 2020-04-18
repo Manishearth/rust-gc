@@ -1,7 +1,6 @@
 #![feature(test)]
 
 extern crate test;
-extern crate gc;
 
 const THING: u64 = 0;
 
