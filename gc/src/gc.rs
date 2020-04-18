@@ -1,8 +1,7 @@
+use crate::trace::{Finalize, Trace};
 use std::cell::{Cell, RefCell};
 use std::mem;
 use std::ptr::NonNull;
-use crate::trace::{Finalize, Trace};
-
 
 const INITIAL_THRESHOLD: usize = 100;
 
@@ -134,7 +133,9 @@ impl<T: Trace + ?Sized> GcBox<T> {
     pub(crate) unsafe fn root_inner(&self) {
         // abort if the count overflows to prevent `mem::forget` loops that could otherwise lead to
         // erroneous drops
-        self.header.roots.set(self.header.roots.get().checked_add(1).unwrap());
+        self.header
+            .roots
+            .set(self.header.roots.get().checked_add(1).unwrap());
     }
 
     /// Decreases the root count on this `GcBox`.

@@ -1,7 +1,7 @@
 #![cfg_attr(feature = "nightly", feature(specialization))]
 
 use gc::{Finalize, Trace};
-use gc_derive::{Trace, Finalize};
+use gc_derive::{Finalize, Trace};
 use std::cell::Cell;
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]

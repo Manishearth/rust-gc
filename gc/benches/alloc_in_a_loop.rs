@@ -15,9 +15,7 @@ fn discard(b: &mut test::Bencher, n: usize) {
 fn keep(b: &mut test::Bencher, n: usize) {
     b.iter(|| {
         gc::force_collect();
-        (0..n)
-            .map(|_| gc::Gc::new(THING))
-            .collect::<Vec<_>>()
+        (0..n).map(|_| gc::Gc::new(THING)).collect::<Vec<_>>()
     })
 }
 
