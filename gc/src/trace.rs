@@ -1,7 +1,14 @@
 use std::collections::{BTreeMap, BTreeSet, BinaryHeap, HashMap, HashSet, LinkedList, VecDeque};
 use std::hash::{BuildHasher, Hash};
+use std::num::{
+    NonZeroI128, NonZeroI16, NonZeroI32, NonZeroI64, NonZeroI8, NonZeroIsize, NonZeroU128,
+    NonZeroU16, NonZeroU32, NonZeroU64, NonZeroU8, NonZeroUsize,
+};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicUsize};
+use std::sync::atomic::{
+    AtomicBool, AtomicI16, AtomicI32, AtomicI64, AtomicI8, AtomicIsize, AtomicU16, AtomicU32,
+    AtomicU64, AtomicU8, AtomicUsize,
+};
 
 /// The Finalize trait. Can be specialized for a specific type to define
 /// finalization logic for that type.
@@ -116,9 +123,9 @@ macro_rules! simple_empty_finalize_trace {
 
 simple_empty_finalize_trace![
     (),
+    bool,
     isize,
     usize,
-    bool,
     i8,
     u8,
     i16,
@@ -127,18 +134,38 @@ simple_empty_finalize_trace![
     u32,
     i64,
     u64,
+    i128,
+    u128,
     f32,
     f64,
     char,
     String,
     Path,
     PathBuf,
+    NonZeroIsize,
+    NonZeroUsize,
+    NonZeroI8,
+    NonZeroU8,
+    NonZeroI16,
+    NonZeroU16,
+    NonZeroI32,
+    NonZeroU32,
+    NonZeroI64,
+    NonZeroU64,
+    NonZeroI128,
+    NonZeroU128,
     AtomicBool,
     AtomicIsize,
-    AtomicUsize
+    AtomicUsize,
+    AtomicI8,
+    AtomicU8,
+    AtomicI16,
+    AtomicU16,
+    AtomicI32,
+    AtomicU32,
+    AtomicI64,
+    AtomicU64
 ];
-
-simple_empty_finalize_trace![i128, u128];
 
 macro_rules! array_finalize_trace {
     ($n:expr) => {
