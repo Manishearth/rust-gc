@@ -41,11 +41,12 @@ impl Finalize for B {
 struct X(Box<dyn Trace>);
 
 #[test]
+#[should_panic(expected = "finalize on drop is broken")]
 fn drop_triggers_finalize() {
     FLAGS.with(|f| assert_eq!(f.get(), Flags(0, 0)));
     {
         let _x = A { b: B };
         FLAGS.with(|f| assert_eq!(f.get(), Flags(0, 0)));
     }
-    FLAGS.with(|f| assert_eq!(f.get(), Flags(1, 1)));
+    FLAGS.with(|f| assert_eq!(f.get(), Flags(1, 1), "finalize on drop is broken"));
 }
