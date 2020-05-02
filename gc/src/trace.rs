@@ -56,7 +56,7 @@ macro_rules! unsafe_empty_trace {
         fn finalize_glue(&self) {
             $crate::Finalize::finalize(self)
         }
-    }
+    };
 }
 
 /// This rule implements the trace method.
@@ -104,7 +104,7 @@ macro_rules! custom_trace {
             let $this = self;
             $body
         }
-    }
+    };
 }
 
 impl<T: ?Sized> Finalize for &'static T {}
@@ -259,6 +259,15 @@ impl<T: Trace + ?Sized> Finalize for Box<T> {}
 unsafe impl<T: Trace + ?Sized> Trace for Box<T> {
     custom_trace!(this, {
         mark(&**this);
+    });
+}
+
+impl<T: Trace> Finalize for Box<[T]> {}
+unsafe impl<T: Trace> Trace for Box<[T]> {
+    custom_trace!(this, {
+        for e in this {
+            mark(e);
+        }
     });
 }
 
