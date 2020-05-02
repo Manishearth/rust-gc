@@ -29,6 +29,9 @@ use std::ops::CoerceUnsized;
 mod gc;
 mod trace;
 
+#[cfg(feature = "derive")]
+pub use gc_derive::{Finalize, Trace};
+
 // We re-export the Trace method, as well as some useful internal methods for
 // managing collections or configuring the garbage collector.
 pub use crate::gc::{finalizer_safe, force_collect};
