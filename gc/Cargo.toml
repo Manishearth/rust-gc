@@ -11,6 +11,10 @@ edition = "2018"
 
 [features]
 nightly = []
+derive = ["gc_derive"]
+
+[dependencies]
+gc_derive = { path = "../gc_derive", version = "0.3", optional = true }
 
 [dev-dependencies]
 gc_derive = { path = "../gc_derive", version = "0.3" }
