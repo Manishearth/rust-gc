@@ -577,7 +577,7 @@ impl<T: Trace + ?Sized> GcCell<T> {
 }
 
 /// An error returned by [`GcCell::try_borrow`](struct.GcCell.html#method.try_borrow).
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Default)]
 pub struct BorrowError;
 
 impl std::fmt::Display for BorrowError {
@@ -587,7 +587,7 @@ impl std::fmt::Display for BorrowError {
 }
 
 /// An error returned by [`GcCell::try_borrow_mut`](struct.GcCell.html#method.try_borrow_mut).
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Default)]
 pub struct BorrowMutError;
 
 impl std::fmt::Display for BorrowMutError {
