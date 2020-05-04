@@ -469,20 +469,9 @@ impl<T: Trace + ?Sized> GcCell<T> {
     /// Panics if the value is currently mutably borrowed.
     #[inline]
     pub fn borrow(&self) -> GcCellRef<'_, T> {
-        if self.flags.get().borrowed() == BorrowState::Writing {
-            panic!("GcCell<T> already mutably borrowed");
-        }
-        self.flags.set(self.flags.get().add_reading());
-
-        // This will fail if the borrow count overflows, which shouldn't happen,
-        // but let's be safe
-        assert!(self.flags.get().borrowed() == BorrowState::Reading);
-
-        unsafe {
-            GcCellRef {
-                flags: &self.flags,
-                value: &*self.cell.get(),
-            }
+        match self.try_borrow() {
+            Ok(value) => value,
+            Err(e) => panic!("{}", e),
         }
     }
 
@@ -496,8 +485,79 @@ impl<T: Trace + ?Sized> GcCell<T> {
     /// Panics if the value is currently borrowed.
     #[inline]
     pub fn borrow_mut(&self) -> GcCellRefMut<'_, T> {
+        match self.try_borrow_mut() {
+            Ok(value) => value,
+            Err(e) => panic!("{}", e),
+        }
+    }
+
+    /// Immutably borrows the wrapped value, returning an error if the value is currently mutably
+    /// borrowed.
+    ///
+    /// The borrow lasts until the returned `GcCellRef` exits scope. Multiple immutable borrows can be
+    /// taken out at the same time.
+    ///
+    /// This is the non-panicking variant of [`borrow`](#method.borrow).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use gc::GcCell;
+    ///
+    /// let c = GcCell::new(5);
+    ///
+    /// {
+    ///     let m = c.borrow_mut();
+    ///     assert!(c.try_borrow().is_err());
+    /// }
+    ///
+    /// {
+    ///     let m = c.borrow();
+    ///     assert!(c.try_borrow().is_ok());
+    /// }
+    /// ```
+    pub fn try_borrow(&self) -> Result<GcCellRef<'_, T>, BorrowError> {
+        if self.flags.get().borrowed() == BorrowState::Writing {
+            return Err(BorrowError);
+        }
+        self.flags.set(self.flags.get().add_reading());
+
+        // This will fail if the borrow count overflows, which shouldn't happen,
+        // but let's be safe
+        assert!(self.flags.get().borrowed() == BorrowState::Reading);
+
+        unsafe {
+            Ok(GcCellRef {
+                flags: &self.flags,
+                value: &*self.cell.get(),
+            })
+        }
+    }
+
+    /// Mutably borrows the wrapped value, returning an error if the value is currently borrowed.
+    ///
+    /// The borrow lasts until the returned `GcCellRefMut` exits scope.
+    /// The value cannot be borrowed while this borrow is active.
+    ///
+    /// This is the non-panicking variant of [`borrow_mut`](#method.borrow_mut).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use gc::GcCell;
+    ///
+    /// let c = GcCell::new(5);
+    ///
+    /// {
+    ///     let m = c.borrow();
+    ///     assert!(c.try_borrow_mut().is_err());
+    /// }
+    ///
+    /// assert!(c.try_borrow_mut().is_ok());
+    /// ```
+    pub fn try_borrow_mut(&self) -> Result<GcCellRefMut<'_, T>, BorrowMutError> {
         if self.flags.get().borrowed() != BorrowState::Unused {
-            panic!("GcCell<T> already borrowed");
+            return Err(BorrowMutError);
         }
         self.flags.set(self.flags.get().set_writing());
 
@@ -508,11 +568,31 @@ impl<T: Trace + ?Sized> GcCell<T> {
                 (*self.cell.get()).root();
             }
 
-            GcCellRefMut {
+            Ok(GcCellRefMut {
                 flags: &self.flags,
                 value: &mut *self.cell.get(),
-            }
+            })
         }
+    }
+}
+
+/// An error returned by [`GcCell::try_borrow`](struct.GcCell.html#method.try_borrow).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BorrowError;
+
+impl std::fmt::Display for BorrowError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Display::fmt("GcCell<T> already mutably borrowed", f)
+    }
+}
+
+/// An error returned by [`GcCell::try_borrow_mut`](struct.GcCell.html#method.try_borrow_mut).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BorrowMutError;
+
+impl std::fmt::Display for BorrowMutError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Display::fmt("GcCell<T> already borrowed", f)
     }
 }
 
