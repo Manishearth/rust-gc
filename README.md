@@ -14,8 +14,7 @@ To include in your project, add the following to your Cargo.toml:
 
 ```toml
 [dependencies]
-gc = "*"
-gc_derive = "*"
+gc = { version = "0.3", features = ["derive] }
 ```
 
 This can be used pretty much like `Rc`, with the exception of interior mutability.
@@ -25,11 +24,7 @@ While this can be used pervasively, this is intended to be used only when needed
 Types placed inside a `Gc` must implement `Trace` and `Finalize`. The easiest way to do this is to use the `gc_derive` crate:
 
 ```rust
-#[macro_use]
-extern crate gc_derive;
-extern crate gc;
-
-use gc::Gc;
+use gc::{Finalize, Gc, Trace};
 
 #[derive(Trace, Finalize)]
 struct Foo {
@@ -47,11 +42,7 @@ struct Foo {
 `Finalize` may also be implemented directly on the struct, in order to add custom finalizer behavior:
 
 ```rust
-#[macro_use]
-extern crate gc_derive;
-extern crate gc;
-
-use gc::Finalize;
+use gc::{Finalize, Trace};
 
 #[derive(Trace)]
 struct Foo {...}
@@ -70,13 +61,7 @@ For types defined in the stdlib, please file an issue on this repository (use th
 Note that `Trace` is only needed for types which transitively contain a `Gc`, if you are sure that this isn't the case, you may use the `unsafe_empty_trace!` macro on your types. Alternatively, use the `#[unsafe_ignore_trace]` annotation on the struct field. Incorrect usage of `unsafe_empty_trace` and `unsafe_ignore_trace` may lead to unsafety.
 
 ```rust
-#[macro_use]
-extern crate gc_derive;
-extern crate gc;
-
-extern crate bar;
-
-use gc::Gc;
+use gc::{Finalize, Gc, Trace};
 use bar::Baz;
 
 #[derive(Trace, Finalize)]
