@@ -32,6 +32,11 @@ struct InnerBoxSlice {
     inner: Box<[u32]>,
 }
 
+#[derive(Trace, Clone, Finalize)]
+struct InnerBoxStr {
+    inner: Box<str>,
+}
+
 #[derive(Trace, Finalize)]
 struct Baz {
     a: Bar,

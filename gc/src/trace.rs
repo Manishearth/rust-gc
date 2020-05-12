@@ -140,6 +140,7 @@ simple_empty_finalize_trace![
     f64,
     char,
     String,
+    Box<str>,
     Path,
     PathBuf,
     NonZeroIsize,
