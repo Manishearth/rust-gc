@@ -354,6 +354,18 @@ impl<T: Trace> From<T> for Gc<T> {
     }
 }
 
+impl<T: Trace + ?Sized> std::borrow::Borrow<T> for Gc<T> {
+    fn borrow(&self) -> &T {
+        &**self
+    }
+}
+
+impl<T: Trace + ?Sized> std::convert::AsRef<T> for Gc<T> {
+    fn as_ref(&self) -> &T {
+        &**self
+    }
+}
+
 ////////////
 // GcCell //
 ////////////
@@ -670,6 +682,12 @@ impl<'a, T: Trace + ?Sized + Debug> Debug for GcCellRef<'a, T> {
     }
 }
 
+impl<'a, T: Trace + ?Sized + Display> Display for GcCellRef<'a, T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        Display::fmt(&**self, f)
+    }
+}
+
 /// A wrapper type for a mutably borrowed value from a `GcCell<T>`.
 pub struct GcCellRefMut<'a, T: Trace + ?Sized + 'static> {
     flags: &'a Cell<BorrowFlag>,
@@ -710,6 +728,12 @@ impl<'a, T: Trace + ?Sized> Drop for GcCellRefMut<'a, T> {
 impl<'a, T: Trace + ?Sized + Debug> Debug for GcCellRefMut<'a, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         Debug::fmt(&*(self.deref()), f)
+    }
+}
+
+impl<'a, T: Trace + ?Sized + Display> Display for GcCellRefMut<'a, T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        Display::fmt(&**self, f)
     }
 }
 
