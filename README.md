@@ -7,7 +7,7 @@ Works, but still under construction.
 
 The design and motivation is illustrated in [this blog post](http://manishearth.github.io/blog/2015/09/01/designing-a-gc-in-rust/), with a sketch of the code [in this gist](https://gist.github.com/mystor/fa1141bfb30643289597).
 
-There is [another post](http://blog.zhenzhang.me/2016/02/18/cgc.html) about the initial design of `cgc`, its experimental concurrent branch.
+There is [another post](https://web.archive.org/web/20161124193746/http://blog.zhenzhang.me/2016/02/18/cgc.html) about the initial design of `cgc`, its experimental concurrent branch.
 
 ## How to use
 To include in your project, add the following to your Cargo.toml:
