@@ -14,7 +14,7 @@ To include in your project, add the following to your Cargo.toml:
 
 ```toml
 [dependencies]
-gc = { version = "0.3", features = ["derive] }
+gc = { version = "0.3", features = ["derive"] }
 ```
 
 This can be used pretty much like `Rc`, with the exception of interior mutability.
