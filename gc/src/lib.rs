@@ -680,7 +680,7 @@ impl<'a, T: Trace + ?Sized> GcCellRef<'a, T> {
     /// //assert_eq!(b2, 5);
     /// ```
     #[inline]
-    pub fn map<U, F>(orig: GcCellRef<'a, T>, f: F) -> GcCellRef<'a, U>
+    pub fn map<U, F>(orig: Self, f: F) -> GcCellRef<'a, U>
     where
         U: Trace + ?Sized,
         F: FnOnce(&T) -> &U,
@@ -690,7 +690,7 @@ impl<'a, T: Trace + ?Sized> GcCellRef<'a, T> {
             value: f(orig.value),
         };
 
-        // We have to tell the compiler not to call the desctructor of GcCellRef,
+        // We have to tell the compiler not to call the destructor of GcCellRef,
         // because it will update the borrow flags.
         std::mem::forget(orig);
 
@@ -716,11 +716,11 @@ impl<'a, T: Trace + ?Sized> GcCellRef<'a, T> {
     /// assert_eq!(*second, 'c');
     /// ```
     #[inline]
-    pub fn map_split<U, V, F>(orig: GcCellRef<'a, T>, f: F) -> (GcCellRef<'a, U>, GcCellRef<'a, V>)
+    pub fn map_split<U, V, F>(orig: Self, f: F) -> (GcCellRef<'a, U>, GcCellRef<'a, V>)
     where
-        F: FnOnce(&T) -> (&U, &V),
         U: Trace + ?Sized,
         V: Trace + ?Sized,
+        F: FnOnce(&T) -> (&U, &V),
     {
         let (a, b) = f(orig.value);
 
@@ -737,7 +737,7 @@ impl<'a, T: Trace + ?Sized> GcCellRef<'a, T> {
             },
         );
 
-        // We have to tell the compiler not to call the desctructor of GcCellRef,
+        // We have to tell the compiler not to call the destructor of GcCellRef,
         // because it will update the borrow flags.
         std::mem::forget(orig);
 
@@ -777,6 +777,51 @@ impl<'a, T: Trace + ?Sized + Display> Display for GcCellRef<'a, T> {
 pub struct GcCellRefMut<'a, T: Trace + ?Sized + 'static> {
     flags: &'a Cell<BorrowFlag>,
     value: &'a mut T,
+}
+
+impl<'a, T: Trace + ?Sized> GcCellRefMut<'a, T> {
+    /// Makes a new `GcCellRefMut` for a component of the borrowed data, e.g., an enum
+    /// variant.
+    ///
+    /// The `GcCellRefMut` is already mutably borrowed, so this cannot fail.
+    ///
+    /// This is an associated function that needs to be used as
+    /// `GcCellRefMut::map(...)`. A method would interfere with methods of the same
+    /// name on the contents of a `GcCell` used through `Deref`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use gc::{GcCell, GcCellRefMut};
+    ///
+    /// let c = GcCell::new((5, 'b'));
+    /// {
+    ///     let b1: GcCellRefMut<(u32, char)> = c.borrow_mut();
+    ///     let mut b2: GcCellRefMut<u32> = GcCellRefMut::map(b1, |t| &mut t.0);
+    ///     assert_eq!(*b2, 5);
+    ///     *b2 = 42;
+    /// }
+    /// assert_eq!(*c.borrow(), (42, 'b'));
+    /// ```
+    #[inline]
+    pub fn map<U, F>(orig: Self, f: F) -> GcCellRefMut<'a, U>
+    where
+        U: Trace + ?Sized,
+        F: FnOnce(&mut T) -> &mut U,
+    {
+        let value = unsafe { &mut *(orig.value as *mut T) };
+
+        let ret = GcCellRefMut {
+            flags: orig.flags,
+            value: f(value),
+        };
+
+        // We have to tell the compiler not to call the destructor of GcCellRefMut,
+        // because it will update the borrow flags.
+        std::mem::forget(orig);
+
+        ret
+    }
 }
 
 impl<'a, T: Trace + ?Sized> Deref for GcCellRefMut<'a, T> {
