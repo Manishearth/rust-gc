@@ -2,6 +2,7 @@
 
 use gc_derive::{Finalize, Trace};
 use std::cell::RefCell;
+use std::rc::Rc;
 
 thread_local!(static X: RefCell<u8> = RefCell::new(0));
 
@@ -35,6 +36,21 @@ struct InnerBoxSlice {
 #[derive(Trace, Clone, Finalize)]
 struct InnerBoxStr {
     inner: Box<str>,
+}
+
+#[derive(Trace, Clone, Finalize)]
+struct InnerRcSlice {
+    inner: Box<[u32]>,
+}
+
+#[derive(Trace, Clone, Finalize)]
+struct InnerRcStr {
+    inner: Rc<str>,
+}
+
+#[derive(Trace, Clone, Finalize)]
+struct InnerRcStruct {
+    inner: Rc<Bar>,
 }
 
 #[derive(Trace, Finalize)]

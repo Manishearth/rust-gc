@@ -5,6 +5,7 @@ use std::num::{
     NonZeroU16, NonZeroU32, NonZeroU64, NonZeroU8, NonZeroUsize,
 };
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::sync::atomic::{
     AtomicBool, AtomicI16, AtomicI32, AtomicI64, AtomicI8, AtomicIsize, AtomicU16, AtomicU32,
     AtomicU64, AtomicU8, AtomicUsize,
@@ -141,6 +142,7 @@ simple_empty_finalize_trace![
     char,
     String,
     Box<str>,
+    Rc<str>,
     Path,
     PathBuf,
     NonZeroIsize,
@@ -255,6 +257,13 @@ type_arg_tuple_based_finalized_trace_impls![
     (A, B, C, D, E, F, G, H, I, J, K);
     (A, B, C, D, E, F, G, H, I, J, K, L);
 ];
+
+impl<T: Trace + ?Sized> Finalize for Rc<T> {}
+unsafe impl<T: Trace + ?Sized> Trace for Rc<T> {
+    custom_trace!(this, {
+        mark(&**this);
+    });
+}
 
 impl<T: Trace + ?Sized> Finalize for Box<T> {}
 unsafe impl<T: Trace + ?Sized> Trace for Box<T> {
