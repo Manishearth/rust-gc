@@ -1,4 +1,4 @@
-use crate::trace::{Finalize, Trace};
+use crate::trace::Trace;
 use std::cell::{Cell, RefCell};
 use std::mem;
 use std::ptr::NonNull;
@@ -14,25 +14,24 @@ const USED_SPACE_RATIO: f64 = 0.7;
 struct GcState {
     bytes_allocated: usize,
     threshold: usize,
-    boxes_start: Option<NonNull<GcBox<dyn Trace>>>,
+    boxes_start: Option<Box<GcBox<dyn Trace>>>,
 }
 
 impl Drop for GcState {
     fn drop(&mut self) {
-        unsafe {
-            {
-                let mut p = &self.boxes_start;
-                while let Some(node) = *p {
-                    Finalize::finalize(&(*node.as_ptr()).data);
-                    p = &(*node.as_ptr()).header.next;
-                }
-            }
+        let mut head = &self.boxes_start;
+        while let Some(ref node) = *head {
+            node.data.finalize();
+            head = &node.header.next;
+        }
 
-            let _guard = DropGuard::new();
-            while let Some(node) = self.boxes_start {
-                let node = Box::from_raw(node.as_ptr());
-                self.boxes_start = node.header.next;
-            }
+        // Drop all allocations in the singly-linked list.
+        // This could be done with `self.boxes_start = None;`,
+        // but that might lead to a large number of recursive drops.
+        let _guard = DropGuard::new();
+        let mut head = self.boxes_start.take();
+        while let Some(node) = head {
+            head = node.header.next;
         }
     }
 }
@@ -68,7 +67,7 @@ pub(crate) struct GcBoxHeader {
     // We are using a word word bool - there is a full 63 bits of unused data :(
     // XXX: Should be able to store marked in the high bit of roots?
     roots: Cell<usize>,
-    next: Option<NonNull<GcBox<dyn Trace>>>,
+    next: Option<Box<GcBox<dyn Trace>>>,
     marked: Cell<bool>,
 }
 
@@ -98,22 +97,23 @@ impl<T: Trace> GcBox<T> {
                 }
             }
 
-            let gcbox = Box::into_raw(Box::new(GcBox {
+            let gcbox = Box::new(GcBox {
                 header: GcBoxHeader {
                     roots: Cell::new(1),
                     marked: Cell::new(false),
                     next: st.boxes_start.take(),
                 },
                 data: value,
-            }));
+            });
+            let ptr = NonNull::from(&*gcbox);
 
-            st.boxes_start = Some(unsafe { NonNull::new_unchecked(gcbox) });
+            st.boxes_start = Some(gcbox);
 
             // We allocated some bytes! Let's record it
             st.bytes_allocated += mem::size_of::<GcBox<T>>();
 
             // Return the pointer to the newly allocated data
-            unsafe { NonNull::new_unchecked(gcbox) }
+            ptr
         })
     }
 }
@@ -152,62 +152,54 @@ impl<T: Trace + ?Sized> GcBox<T> {
 
 /// Collects garbage.
 fn collect_garbage(st: &mut GcState) {
-    struct Unmarked {
-        incoming: *mut Option<NonNull<GcBox<dyn Trace>>>,
-        this: NonNull<GcBox<dyn Trace>>,
-    }
-    unsafe fn mark(head: &mut Option<NonNull<GcBox<dyn Trace>>>) -> Vec<Unmarked> {
+    unsafe fn mark(head: &Option<Box<GcBox<dyn Trace>>>) {
         // Walk the tree, tracing and marking the nodes
-        let mut mark_head = *head;
-        while let Some(node) = mark_head {
-            if (*node.as_ptr()).header.roots.get() > 0 {
-                (*node.as_ptr()).trace_inner();
+        let mut mark_head = head;
+        while let Some(ref node) = *mark_head {
+            if node.header.roots.get() > 0 {
+                node.trace_inner();
             }
 
-            mark_head = (*node.as_ptr()).header.next;
+            mark_head = &node.header.next;
         }
-
-        // Collect a vector of all of the nodes which were not marked,
-        // and unmark the ones which were.
-        let mut unmarked = Vec::new();
-        let mut unmark_head = head;
-        while let Some(node) = *unmark_head {
-            if (*node.as_ptr()).header.marked.get() {
-                (*node.as_ptr()).header.marked.set(false);
-            } else {
-                unmarked.push(Unmarked {
-                    incoming: unmark_head,
-                    this: node,
-                });
-            }
-            unmark_head = &mut (*node.as_ptr()).header.next;
-        }
-        unmarked
     }
 
-    unsafe fn sweep(finalized: Vec<Unmarked>, bytes_allocated: &mut usize) {
+    unsafe fn sweep(
+        head: &mut Option<Box<GcBox<dyn Trace>>>,
+        bytes_allocated: &mut usize,
+    ) {
         let _guard = DropGuard::new();
-        for node in finalized.into_iter().rev() {
-            if (*node.this.as_ptr()).header.marked.get() {
-                continue;
+
+        // Collect the unmarked nodes from the allocation list into a vector.
+        // Also unmark the nodes which were marked, to prepare for the next GC.
+        let mut unmarked = None;
+        let mut unmark_head = head;
+        while let Some(mut node) = unmark_head.take() {
+            if node.header.marked.get() {
+                node.header.marked.set(false);
+                // `get_or_insert()` will always re-insert `node`.
+                // It is just used to get a reference to the next node pointer.
+                unmark_head = &mut unmark_head.get_or_insert(node).header.next;
+            } else {
+                // Finalize the node's contents
+                node.value().finalize_glue();
+                // Move `node` from the allocation list to the unmarked list
+                *unmark_head = node.header.next;
+                node.header.next = unmarked;
+                unmarked = Some(node);
             }
-            let incoming = node.incoming;
-            let mut node = Box::from_raw(node.this.as_ptr());
+        }
+
+        while let Some(node) = unmarked {
             *bytes_allocated -= mem::size_of_val::<GcBox<_>>(&*node);
-            *incoming = node.header.next.take();
+            unmarked = node.header.next;
+            // `node` is dropped here, freeing the allocation
         }
     }
 
     unsafe {
-        let unmarked = mark(&mut st.boxes_start);
-        if unmarked.is_empty() {
-            return;
-        }
-        for node in &unmarked {
-            Trace::finalize_glue(&(*node.this.as_ptr()).data);
-        }
-        mark(&mut st.boxes_start);
-        sweep(unmarked, &mut st.bytes_allocated);
+        mark(&st.boxes_start);
+        sweep(&mut st.boxes_start, &mut st.bytes_allocated);
     }
 }
 
