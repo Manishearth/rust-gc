@@ -88,7 +88,7 @@ impl<T: Trace> Gc<T> {
 
     /// Returns `true` if the two `Gc`s point to the same allocation.
     pub fn ptr_eq(this: &Gc<T>, other: &Gc<T>) -> bool {
-        this.ptr_root.get().as_ptr() == other.ptr_root.get().as_ptr()
+        ptr::eq(this.inner(), other.inner())
     }
 }
 
