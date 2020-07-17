@@ -267,3 +267,27 @@ fn trait_gc() {
     use_trait_gc(gc_foo);
     use_trait_gc(gc_bar);
 }
+
+#[test]
+fn ptr_eq() {
+    #[derive(Finalize, Trace)]
+    struct A;
+    #[derive(Finalize, Trace)]
+    struct B(Gc<A>);
+
+    let a = Gc::new(A);
+    let aa = a.clone();
+    assert!(Gc::ptr_eq(&a, &aa));
+    let b = Gc::new(B(aa));
+    assert!(Gc::ptr_eq(&a, &b.0));
+    let bb = Gc::new(B(a.clone()));
+    assert!(Gc::ptr_eq(&b.0, &bb.0));
+
+    let a2 = Gc::new(A);
+    assert!(!Gc::ptr_eq(&a, &a2));
+    let b2 = Gc::new(B(a2.clone()));
+    assert!(Gc::ptr_eq(&a2, &b2.0));
+    assert!(!Gc::ptr_eq(&a, &b2.0));
+    assert!(!Gc::ptr_eq(&b.0, &b2.0));
+    assert!(!Gc::ptr_eq(&b.0, &a2));
+}
