@@ -85,7 +85,9 @@ impl<T: Trace> Gc<T> {
             gc
         }
     }
+}
 
+impl<T: Trace + ?Sized> Gc<T> {
     /// Returns `true` if the two `Gc`s point to the same allocation.
     pub fn ptr_eq(this: &Gc<T>, other: &Gc<T>) -> bool {
         ptr::eq(this.inner(), other.inner())
@@ -342,7 +344,7 @@ impl<T: Trace + ?Sized + Debug> Debug for Gc<T> {
     }
 }
 
-impl<T: Trace> fmt::Pointer for Gc<T> {
+impl<T: Trace + ?Sized> fmt::Pointer for Gc<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Pointer::fmt(&self.inner(), f)
     }

@@ -18,7 +18,7 @@ fn derive_trace(mut s: Structure<'_>) -> proc_macro2::TokenStream {
             #[inline] unsafe fn trace(&self) {
                 #[allow(dead_code)]
                 #[inline]
-                unsafe fn mark<T: ::gc::Trace>(it: &T) {
+                unsafe fn mark<T: ::gc::Trace + ?Sized>(it: &T) {
                     ::gc::Trace::trace(it);
                 }
                 match *self { #trace_body }
@@ -26,7 +26,7 @@ fn derive_trace(mut s: Structure<'_>) -> proc_macro2::TokenStream {
             #[inline] unsafe fn root(&self) {
                 #[allow(dead_code)]
                 #[inline]
-                unsafe fn mark<T: ::gc::Trace>(it: &T) {
+                unsafe fn mark<T: ::gc::Trace + ?Sized>(it: &T) {
                     ::gc::Trace::root(it);
                 }
                 match *self { #trace_body }
@@ -34,7 +34,7 @@ fn derive_trace(mut s: Structure<'_>) -> proc_macro2::TokenStream {
             #[inline] unsafe fn unroot(&self) {
                 #[allow(dead_code)]
                 #[inline]
-                unsafe fn mark<T: ::gc::Trace>(it: &T) {
+                unsafe fn mark<T: ::gc::Trace + ?Sized>(it: &T) {
                     ::gc::Trace::unroot(it);
                 }
                 match *self { #trace_body }
@@ -42,7 +42,7 @@ fn derive_trace(mut s: Structure<'_>) -> proc_macro2::TokenStream {
             #[inline] fn finalize_glue(&self) {
                 #[allow(dead_code)]
                 #[inline]
-                fn mark<T: ::gc::Trace>(it: &T) {
+                fn mark<T: ::gc::Trace + ?Sized>(it: &T) {
                     ::gc::Trace::finalize_glue(it);
                 }
                 match *self { #trace_body }
