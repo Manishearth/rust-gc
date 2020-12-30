@@ -1,7 +1,7 @@
 use crate::trace::{Finalize, Trace};
 use std::cell::{Cell, RefCell};
 use std::mem;
-use std::ptr::NonNull;
+use std::ptr::{self, NonNull};
 
 const INITIAL_THRESHOLD: usize = 100;
 
@@ -119,6 +119,13 @@ impl<T: Trace> GcBox<T> {
 }
 
 impl<T: Trace + ?Sized> GcBox<T> {
+    /// Returns `true` if the two references refer to the same `GcBox`.
+    pub(crate) fn ptr_eq(this: &GcBox<T>, other: &GcBox<T>) -> bool {
+        // Use .header to ignore fat pointer vtables, to work around
+        // https://github.com/rust-lang/rust/issues/46139
+        ptr::eq(&this.header, &other.header)
+    }
+
     /// Marks this `GcBox` and marks through its data.
     pub(crate) unsafe fn trace_inner(&self) {
         let marked = self.header.marked.get();

@@ -90,7 +90,7 @@ impl<T: Trace> Gc<T> {
 impl<T: Trace + ?Sized> Gc<T> {
     /// Returns `true` if the two `Gc`s point to the same allocation.
     pub fn ptr_eq(this: &Gc<T>, other: &Gc<T>) -> bool {
-        ptr::eq(this.inner(), other.inner())
+        GcBox::ptr_eq(this.inner(), other.inner())
     }
 }
 
