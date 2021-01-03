@@ -17,12 +17,6 @@ pub trait Finalize {
     fn finalize(&self) {}
 }
 
-/// Ensures type has no custom Drop implementation, without implementing it itself
-/// In case of Drop implementation present, obscure compilation error will be raised
-pub unsafe trait TriviallyDrop {
-    unsafe fn guard(self);
-}
-
 #[cfg(feature = "nightly")]
 impl<T: ?Sized> Finalize for T {
     // XXX: Should this function somehow tell its caller (which is presumably

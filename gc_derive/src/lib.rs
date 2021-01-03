@@ -76,25 +76,19 @@ fn derive_trace(mut s: Structure<'_>) -> proc_macro2::TokenStream {
             #drop_impl
         }
     } else {
-        let finalize_impl = derive_finalize(s.clone());
-
         s.bind_with(|_| BindStyle::Move);
-        let trivially_drop_body = s.each(|bi| quote!(drop(#bi)));
-
-        let trivially_drop_impl = s.unsafe_bound_impl(
-            quote!(::gc::TriviallyDrop),
+        let trivially_drop_body = s.each(|_| quote! {});
+        let finalize_impl = s.bound_impl(
+            quote!(::gc::Finalize),
             quote!(
-                unsafe fn guard(self) {
-                    match self {
-                        #trivially_drop_body
-                    }
+                fn finalize(&self) {
+                    let _trivially_drop = |t: Self| match t { #trivially_drop_body };
                 }
             ),
         );
 
         quote! {
             #trace_impl
-            #trivially_drop_impl
             #finalize_impl
         }
     }
