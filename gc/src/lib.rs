@@ -657,12 +657,29 @@ unsafe impl<T: Trace + ?Sized> Trace for GcCell<T> {
 }
 
 /// A wrapper type for an immutably borrowed value from a `GcCell<T>`.
-pub struct GcCellRef<'a, T: Trace + ?Sized + 'static> {
+pub struct GcCellRef<'a, T: ?Sized + 'static> {
     flags: &'a Cell<BorrowFlag>,
     value: &'a T,
 }
 
-impl<'a, T: Trace + ?Sized> GcCellRef<'a, T> {
+impl<'a, T: ?Sized> GcCellRef<'a, T> {
+    /// Copies a `GcCellRef`.
+    ///
+    /// The `GcCell` is already immutably borrowed, so this cannot fail.
+    ///
+    /// This is an associated function that needs to be used as
+    /// `GcCellRef::clone(...)`. A `Clone` implementation or a method
+    /// would interfere with the use of `c.borrow().clone()` to clone
+    /// the contents of a `GcCell`.
+    #[inline]
+    pub fn clone(orig: &GcCellRef<'a, T>) -> GcCellRef<'a, T> {
+        orig.flags.set(orig.flags.get().add_reading());
+        GcCellRef {
+            flags: orig.flags,
+            value: orig.value,
+        }
+    }
+
     /// Makes a new `GcCellRef` from a component of the borrowed data.
     ///
     /// The `GcCell` is already immutably borrowed, so this cannot fail.
@@ -684,7 +701,7 @@ impl<'a, T: Trace + ?Sized> GcCellRef<'a, T> {
     #[inline]
     pub fn map<U, F>(orig: Self, f: F) -> GcCellRef<'a, U>
     where
-        U: Trace + ?Sized,
+        U: ?Sized,
         F: FnOnce(&T) -> &U,
     {
         let ret = GcCellRef {
@@ -720,8 +737,8 @@ impl<'a, T: Trace + ?Sized> GcCellRef<'a, T> {
     #[inline]
     pub fn map_split<U, V, F>(orig: Self, f: F) -> (GcCellRef<'a, U>, GcCellRef<'a, V>)
     where
-        U: Trace + ?Sized,
-        V: Trace + ?Sized,
+        U: ?Sized,
+        V: ?Sized,
         F: FnOnce(&T) -> (&U, &V),
     {
         let (a, b) = f(orig.value);
@@ -747,7 +764,7 @@ impl<'a, T: Trace + ?Sized> GcCellRef<'a, T> {
     }
 }
 
-impl<'a, T: Trace + ?Sized> Deref for GcCellRef<'a, T> {
+impl<'a, T: ?Sized> Deref for GcCellRef<'a, T> {
     type Target = T;
 
     #[inline]
@@ -756,20 +773,20 @@ impl<'a, T: Trace + ?Sized> Deref for GcCellRef<'a, T> {
     }
 }
 
-impl<'a, T: Trace + ?Sized> Drop for GcCellRef<'a, T> {
+impl<'a, T: ?Sized> Drop for GcCellRef<'a, T> {
     fn drop(&mut self) {
         debug_assert!(self.flags.get().borrowed() == BorrowState::Reading);
         self.flags.set(self.flags.get().sub_reading());
     }
 }
 
-impl<'a, T: Trace + ?Sized + Debug> Debug for GcCellRef<'a, T> {
+impl<'a, T: ?Sized + Debug> Debug for GcCellRef<'a, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         Debug::fmt(&**self, f)
     }
 }
 
-impl<'a, T: Trace + ?Sized + Display> Display for GcCellRef<'a, T> {
+impl<'a, T: ?Sized + Display> Display for GcCellRef<'a, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         Display::fmt(&**self, f)
     }
