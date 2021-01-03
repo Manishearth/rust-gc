@@ -663,6 +663,23 @@ pub struct GcCellRef<'a, T: ?Sized + 'static> {
 }
 
 impl<'a, T: ?Sized> GcCellRef<'a, T> {
+    /// Copies a `GcCellRef`.
+    ///
+    /// The `GcCell` is already immutably borrowed, so this cannot fail.
+    ///
+    /// This is an associated function that needs to be used as
+    /// `GcCellRef::clone(...)`. A `Clone` implementation or a method
+    /// would interfere with the use of `c.borrow().clone()` to clone
+    /// the contents of a `GcCell`.
+    #[inline]
+    pub fn clone(orig: &GcCellRef<'a, T>) -> GcCellRef<'a, T> {
+        orig.flags.set(orig.flags.get().add_reading());
+        GcCellRef {
+            flags: orig.flags,
+            value: orig.value,
+        }
+    }
+
     /// Makes a new `GcCellRef` from a component of the borrowed data.
     ///
     /// The `GcCell` is already immutably borrowed, so this cannot fail.
