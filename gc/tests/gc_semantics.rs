@@ -257,12 +257,12 @@ fn trait_gc() {
             10
         }
     }
-    fn use_trait_gc(x: Gc<Foo>) {
+    fn use_trait_gc(x: Gc<dyn Foo>) {
         assert_eq!(x.f(), 10);
     }
 
     let gc_bar = Gc::new(Bar);
-    let gc_foo: Gc<Foo> = gc_bar.clone();
+    let gc_foo: Gc<dyn Foo> = gc_bar.clone();
 
     use_trait_gc(gc_foo);
     use_trait_gc(gc_bar);
