@@ -213,7 +213,6 @@ fn collect_garbage(st: &mut GcState) {
         for node in &unmarked {
             Trace::finalize_glue(&(*node.this.as_ptr()).data);
         }
-        mark(&mut st.boxes_start);
         sweep(unmarked, &mut st.bytes_allocated);
     }
 }
