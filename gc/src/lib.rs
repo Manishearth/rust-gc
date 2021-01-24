@@ -195,10 +195,12 @@ impl<T: Trace + ?Sized> Gc<T> {
         let fake_ptr = ptr as *mut GcBox<T>;
         let rc_ptr = set_data_ptr(fake_ptr, (ptr as *mut u8).offset(-offset));
 
-        Gc {
+        let gc = Gc {
             ptr_root: Cell::new(NonNull::new_unchecked(rc_ptr)),
             marker: PhantomData,
-        }
+        };
+        gc.set_root();
+        gc
     }
 }
 
