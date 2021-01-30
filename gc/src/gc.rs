@@ -72,6 +72,7 @@ pub(crate) struct GcBoxHeader {
     marked: Cell<bool>,
 }
 
+#[repr(C)] // to justify the layout computation in Gc::from_raw
 pub(crate) struct GcBox<T: Trace + ?Sized + 'static> {
     header: GcBoxHeader,
     data: T,

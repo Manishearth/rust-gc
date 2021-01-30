@@ -9,14 +9,14 @@
     feature(coerce_unsized, auto_traits, unsize, specialization)
 )]
 
-use crate::gc::GcBox;
+use crate::gc::{GcBox, GcBoxHeader};
 use std::alloc::Layout;
 use std::cell::{Cell, UnsafeCell};
 use std::cmp::Ordering;
 use std::fmt::{self, Debug, Display};
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
-use std::mem::{self, align_of_val};
+use std::mem;
 use std::ops::{Deref, DerefMut};
 use std::ptr::{self, NonNull};
 use std::rc::Rc;
@@ -185,15 +185,15 @@ impl<T: Trace + ?Sized> Gc<T> {
     /// // (when the collector is run), which would result in `x_ptr` dangling!
     /// ```
     pub unsafe fn from_raw(ptr: *const T) -> Self {
-        // Align the unsized value to the end of the GcBox.
-        // Because it is ?Sized, it will always be the last field in memory.
-        let align = align_of_val(&*ptr);
-        let layout = Layout::new::<GcBox<()>>();
-        let offset = (layout.size() + padding_needed_for_gc(align)) as isize;
+        // Find the offset of T in GcBox<T>. Note that Layout::extend
+        // relies on GcBox being repr(C).
+        let (_, offset) = Layout::new::<GcBoxHeader>()
+            .extend(Layout::for_value::<T>(&*ptr))
+            .unwrap();
 
         // Reverse the offset to find the original GcBox.
         let fake_ptr = ptr as *mut GcBox<T>;
-        let rc_ptr = set_data_ptr(fake_ptr, (ptr as *mut u8).offset(-offset));
+        let rc_ptr = set_data_ptr(fake_ptr, (ptr as *mut u8).offset(-(offset as isize)));
 
         let gc = Gc {
             ptr_root: Cell::new(NonNull::new_unchecked(rc_ptr)),
@@ -971,18 +971,4 @@ impl<T: Trace + ?Sized + Debug> Debug for GcCell<T> {
 unsafe fn set_data_ptr<T: ?Sized, U>(mut ptr: *mut T, data: *mut U) -> *mut T {
     ptr::write(&mut ptr as *mut _ as *mut *mut u8, data as *mut u8);
     ptr
-}
-
-fn padding_needed_for_gc(align: usize) -> usize {
-    assert!(align.count_ones() == 1, "align must be a power-of-two!");
-
-    // Determine how much our header is misaligned for `align`.
-    // `align - 1` is a mask of all bits less than the alignment,
-    // as `align` is a power-of-two.
-    let misaligned = mem::size_of::<GcBox<()>>() & (align - 1);
-    if misaligned > 0 {
-        align - misaligned
-    } else {
-        0
-    }
 }
