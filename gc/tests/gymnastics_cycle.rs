@@ -1,4 +1,4 @@
-#![cfg_attr(feature = "nightly", feature(specialization))]
+#![cfg_attr(feature = "nightly", feature(min_specialization))]
 
 use gc::{force_collect, Gc, GcCell};
 use gc_derive::Trace;

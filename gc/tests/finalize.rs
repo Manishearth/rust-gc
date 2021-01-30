@@ -1,4 +1,4 @@
-#![cfg_attr(feature = "nightly", feature(specialization))]
+#![cfg_attr(feature = "nightly", feature(min_specialization))]
 
 use gc::{Finalize, Trace};
 use gc_derive::{Finalize, Trace};

@@ -6,7 +6,7 @@
 
 #![cfg_attr(
     feature = "nightly",
-    feature(coerce_unsized, auto_traits, unsize, specialization)
+    feature(coerce_unsized, auto_traits, unsize, min_specialization)
 )]
 
 use crate::gc::GcBox;
