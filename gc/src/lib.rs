@@ -872,7 +872,9 @@ impl<'a, T: Trace + ?Sized, U: ?Sized> Drop for GcCellRefMut<'a, T, U> {
                 (*self.gc_cell.cell.get()).unroot();
             }
         }
-        self.gc_cell.flags.set(self.gc_cell.flags.get().set_unused());
+        self.gc_cell
+            .flags
+            .set(self.gc_cell.flags.get().set_unused());
     }
 }
 
