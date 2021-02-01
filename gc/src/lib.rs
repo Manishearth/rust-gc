@@ -4,10 +4,7 @@
 //! It is marked as non-sendable because the garbage collection only occurs
 //! thread-locally.
 
-#![cfg_attr(
-    feature = "nightly",
-    feature(coerce_unsized, auto_traits, unsize, specialization)
-)]
+#![cfg_attr(feature = "nightly", feature(coerce_unsized, unsize, specialization))]
 
 use crate::gc::GcBox;
 use std::alloc::Layout;
@@ -872,7 +869,9 @@ impl<'a, T: Trace + ?Sized, U: ?Sized> Drop for GcCellRefMut<'a, T, U> {
                 (*self.gc_cell.cell.get()).unroot();
             }
         }
-        self.gc_cell.flags.set(self.gc_cell.flags.get().set_unused());
+        self.gc_cell
+            .flags
+            .set(self.gc_cell.flags.get().set_unused());
     }
 }
 
