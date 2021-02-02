@@ -36,9 +36,6 @@ struct Foo {
 // now, `Gc<Foo>` may be used
 ```
 
-> NOTE: Finalize is automatically implemented on all types when the `nightly`
-> feature is enabled through specialization.
-
 `Finalize` may also be implemented directly on the struct, in order to add custom finalizer behavior:
 
 ```rust

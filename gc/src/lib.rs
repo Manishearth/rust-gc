@@ -4,7 +4,7 @@
 //! It is marked as non-sendable because the garbage collection only occurs
 //! thread-locally.
 
-#![cfg_attr(feature = "nightly", feature(coerce_unsized, unsize, specialization))]
+#![cfg_attr(feature = "nightly", feature(coerce_unsized, unsize))]
 
 use crate::gc::GcBox;
 use std::alloc::Layout;

@@ -1,5 +1,3 @@
-#![cfg_attr(feature = "nightly", feature(specialization))]
-
 use gc::{force_collect, Finalize, Gc, GcCell, Trace};
 use gc_derive::{Finalize, Trace};
 use std::cell::Cell;
@@ -247,7 +245,7 @@ fn gccell_rooting() {
 // XXX: CoerceUnsize is unstable only
 #[test]
 fn trait_gc() {
-    #[derive(Trace)]
+    #[derive(Finalize, Trace)]
     struct Bar;
     trait Foo: Trace {
         fn f(&self) -> i32;
