@@ -1,5 +1,3 @@
-#![cfg_attr(feature = "nightly", feature(specialization))]
-
 use gc::{Finalize, Trace};
 use gc_derive::{Finalize, Trace};
 use std::cell::Cell;

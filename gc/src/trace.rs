@@ -11,18 +11,10 @@ use std::sync::atomic::{
     AtomicU64, AtomicU8, AtomicUsize,
 };
 
-/// The Finalize trait. Can be specialized for a specific type to define
-/// finalization logic for that type.
+/// The Finalize trait, which needs to be implemented on
+/// garbage-collected objects to define finalization logic.
 pub trait Finalize {
     fn finalize(&self) {}
-}
-
-#[cfg(feature = "nightly")]
-impl<T: ?Sized> Finalize for T {
-    // XXX: Should this function somehow tell its caller (which is presumably
-    // the GC runtime) that it did nothing?
-    #[inline]
-    default fn finalize(&self) {}
 }
 
 /// The Trace trait, which needs to be implemented on garbage-collected objects.
