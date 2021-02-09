@@ -40,13 +40,13 @@ fn derive_trace(mut s: Structure<'_>) -> proc_macro2::TokenStream {
                 match *self { #trace_body }
             }
             #[inline] fn finalize_glue(&self) {
+                ::gc::Finalize::finalize(self);
                 #[allow(dead_code)]
                 #[inline]
                 fn mark<T: ::gc::Trace + ?Sized>(it: &T) {
                     ::gc::Trace::finalize_glue(it);
                 }
                 match *self { #trace_body }
-                ::gc::Finalize::finalize(self);
             }
         },
     );
