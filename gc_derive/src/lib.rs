@@ -1,5 +1,5 @@
 use quote::quote;
-use synstructure::{decl_derive, Structure};
+use synstructure::{decl_derive, AddBounds, Structure};
 
 decl_derive!([Trace, attributes(unsafe_ignore_trace)] => derive_trace);
 
@@ -12,6 +12,7 @@ fn derive_trace(mut s: Structure<'_>) -> proc_macro2::TokenStream {
     });
     let trace_body = s.each(|bi| quote!(mark(#bi)));
 
+    s.add_bounds(AddBounds::Fields);
     let trace_impl = s.unsafe_bound_impl(
         quote!(::gc::Trace),
         quote! {
