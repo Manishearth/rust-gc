@@ -1,8 +1,8 @@
 [package]
 name = "gc"
-version = "0.4.0"
+version = "0.4.1"
 authors = ["Manish Goregaokar <manishsmail@gmail.com>", "Nika Layzell <nika@thelayzells.com>"]
-description = "Tracing garbage collector plugin for Rust. Not ready for use yet, please see README"
+description = "Tracing garbage collector plugin for Rust."
 repository = "https://github.com/Manishearth/rust-gc"
 readme = "../README.md"
 license = "MPL-2.0"
@@ -14,7 +14,7 @@ nightly = []
 derive = ["gc_derive"]
 
 [dependencies]
-gc_derive = { path = "../gc_derive", version = "0.3", optional = true }
+gc_derive = { path = "../gc_derive", version = "0.4.1", optional = true }
 
 [dev-dependencies]
-gc_derive = { path = "../gc_derive", version = "0.3" }
+gc_derive = { path = "../gc_derive", version = "0.4.1" }
