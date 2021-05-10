@@ -162,17 +162,13 @@ simple_empty_finalize_trace![
     AtomicU64
 ];
 
-macro_rules! array_finalize_trace {
-    ($n:expr) => {
-        impl<T: Trace> Finalize for [T; $n] {}
-        unsafe impl<T: Trace> Trace for [T; $n] {
-            custom_trace!(this, {
-                for v in this {
-                    mark(v);
-                }
-            });
+impl<T: Trace, const N: usize> Finalize for [T; N] {}
+unsafe impl<T: Trace, const N: usize> Trace for [T; N] {
+    custom_trace!(this, {
+        for v in this {
+            mark(v);
         }
-    };
+    });
 }
 
 macro_rules! fn_finalize_trace_one {
@@ -214,13 +210,6 @@ macro_rules! tuple_finalize_trace {
     }
 }
 
-macro_rules! array_finalize_trace_impls {
-    ($($n:expr),*) => {
-        $(
-            array_finalize_trace!($n);
-        )*
-    }
-}
 macro_rules! type_arg_tuple_based_finalized_trace_impls {
     ($(($($args:ident),*);)*) => {
         $(
@@ -230,10 +219,6 @@ macro_rules! type_arg_tuple_based_finalized_trace_impls {
     }
 }
 
-array_finalize_trace_impls![
-    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
-    26, 27, 28, 29, 30, 31
-];
 type_arg_tuple_based_finalized_trace_impls![
     ();
     (A);
