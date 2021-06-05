@@ -1,4 +1,4 @@
-use crate::trace::{Finalize, Trace};
+use crate::trace::Trace;
 use std::cell::{Cell, RefCell};
 use std::mem;
 use std::ptr::{self, NonNull};
@@ -19,21 +19,9 @@ struct GcState {
 
 impl Drop for GcState {
     fn drop(&mut self) {
-        unsafe {
-            {
-                let mut p = &self.boxes_start;
-                while let Some(node) = *p {
-                    Finalize::finalize(&(*node.as_ptr()).data);
-                    p = &(*node.as_ptr()).header.next;
-                }
-            }
-
-            let _guard = DropGuard::new();
-            while let Some(node) = self.boxes_start {
-                let node = Box::from_raw(node.as_ptr());
-                self.boxes_start = node.header.next;
-            }
-        }
+        collect_garbage(self);
+        // We have no choice but to leak any remaining nodes that
+        // might be referenced from other thread-local variables.
     }
 }
 
@@ -72,6 +60,7 @@ pub(crate) struct GcBoxHeader {
     marked: Cell<bool>,
 }
 
+#[repr(C)] // to justify the layout computation in Gc::from_raw
 pub(crate) struct GcBox<T: Trace + ?Sized + 'static> {
     header: GcBoxHeader,
     data: T,

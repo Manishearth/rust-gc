@@ -4,19 +4,16 @@
 //! It is marked as non-sendable because the garbage collection only occurs
 //! thread-locally.
 
-#![cfg_attr(
-    feature = "nightly",
-    feature(coerce_unsized, auto_traits, unsize, specialization)
-)]
+#![cfg_attr(feature = "nightly", feature(coerce_unsized, unsize))]
 
-use crate::gc::GcBox;
+use crate::gc::{GcBox, GcBoxHeader};
 use std::alloc::Layout;
 use std::cell::{Cell, UnsafeCell};
 use std::cmp::Ordering;
 use std::fmt::{self, Debug, Display};
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
-use std::mem::{self, align_of_val};
+use std::mem;
 use std::ops::{Deref, DerefMut};
 use std::ptr::{self, NonNull};
 use std::rc::Rc;
@@ -185,20 +182,22 @@ impl<T: Trace + ?Sized> Gc<T> {
     /// // (when the collector is run), which would result in `x_ptr` dangling!
     /// ```
     pub unsafe fn from_raw(ptr: *const T) -> Self {
-        // Align the unsized value to the end of the GcBox.
-        // Because it is ?Sized, it will always be the last field in memory.
-        let align = align_of_val(&*ptr);
-        let layout = Layout::new::<GcBox<()>>();
-        let offset = (layout.size() + padding_needed_for_gc(align)) as isize;
+        // Find the offset of T in GcBox<T>. Note that Layout::extend
+        // relies on GcBox being repr(C).
+        let (_, offset) = Layout::new::<GcBoxHeader>()
+            .extend(Layout::for_value::<T>(&*ptr))
+            .unwrap();
 
         // Reverse the offset to find the original GcBox.
         let fake_ptr = ptr as *mut GcBox<T>;
-        let rc_ptr = set_data_ptr(fake_ptr, (ptr as *mut u8).offset(-offset));
+        let rc_ptr = set_data_ptr(fake_ptr, (ptr as *mut u8).offset(-(offset as isize)));
 
-        Gc {
+        let gc = Gc {
             ptr_root: Cell::new(NonNull::new_unchecked(rc_ptr)),
             marker: PhantomData,
-        }
+        };
+        gc.set_root();
+        gc
     }
 }
 
@@ -586,7 +585,7 @@ impl<T: Trace + ?Sized> GcCell<T> {
             }
 
             Ok(GcCellRefMut {
-                flags: &self.flags,
+                gc_cell: self,
                 value: &mut *self.cell.get(),
             })
         }
@@ -657,12 +656,29 @@ unsafe impl<T: Trace + ?Sized> Trace for GcCell<T> {
 }
 
 /// A wrapper type for an immutably borrowed value from a `GcCell<T>`.
-pub struct GcCellRef<'a, T: Trace + ?Sized + 'static> {
+pub struct GcCellRef<'a, T: ?Sized + 'static> {
     flags: &'a Cell<BorrowFlag>,
     value: &'a T,
 }
 
-impl<'a, T: Trace + ?Sized> GcCellRef<'a, T> {
+impl<'a, T: ?Sized> GcCellRef<'a, T> {
+    /// Copies a `GcCellRef`.
+    ///
+    /// The `GcCell` is already immutably borrowed, so this cannot fail.
+    ///
+    /// This is an associated function that needs to be used as
+    /// `GcCellRef::clone(...)`. A `Clone` implementation or a method
+    /// would interfere with the use of `c.borrow().clone()` to clone
+    /// the contents of a `GcCell`.
+    #[inline]
+    pub fn clone(orig: &GcCellRef<'a, T>) -> GcCellRef<'a, T> {
+        orig.flags.set(orig.flags.get().add_reading());
+        GcCellRef {
+            flags: orig.flags,
+            value: orig.value,
+        }
+    }
+
     /// Makes a new `GcCellRef` from a component of the borrowed data.
     ///
     /// The `GcCell` is already immutably borrowed, so this cannot fail.
@@ -684,7 +700,7 @@ impl<'a, T: Trace + ?Sized> GcCellRef<'a, T> {
     #[inline]
     pub fn map<U, F>(orig: Self, f: F) -> GcCellRef<'a, U>
     where
-        U: Trace + ?Sized,
+        U: ?Sized,
         F: FnOnce(&T) -> &U,
     {
         let ret = GcCellRef {
@@ -720,8 +736,8 @@ impl<'a, T: Trace + ?Sized> GcCellRef<'a, T> {
     #[inline]
     pub fn map_split<U, V, F>(orig: Self, f: F) -> (GcCellRef<'a, U>, GcCellRef<'a, V>)
     where
-        U: Trace + ?Sized,
-        V: Trace + ?Sized,
+        U: ?Sized,
+        V: ?Sized,
         F: FnOnce(&T) -> (&U, &V),
     {
         let (a, b) = f(orig.value);
@@ -747,7 +763,7 @@ impl<'a, T: Trace + ?Sized> GcCellRef<'a, T> {
     }
 }
 
-impl<'a, T: Trace + ?Sized> Deref for GcCellRef<'a, T> {
+impl<'a, T: ?Sized> Deref for GcCellRef<'a, T> {
     type Target = T;
 
     #[inline]
@@ -756,32 +772,32 @@ impl<'a, T: Trace + ?Sized> Deref for GcCellRef<'a, T> {
     }
 }
 
-impl<'a, T: Trace + ?Sized> Drop for GcCellRef<'a, T> {
+impl<'a, T: ?Sized> Drop for GcCellRef<'a, T> {
     fn drop(&mut self) {
         debug_assert!(self.flags.get().borrowed() == BorrowState::Reading);
         self.flags.set(self.flags.get().sub_reading());
     }
 }
 
-impl<'a, T: Trace + ?Sized + Debug> Debug for GcCellRef<'a, T> {
+impl<'a, T: ?Sized + Debug> Debug for GcCellRef<'a, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         Debug::fmt(&**self, f)
     }
 }
 
-impl<'a, T: Trace + ?Sized + Display> Display for GcCellRef<'a, T> {
+impl<'a, T: ?Sized + Display> Display for GcCellRef<'a, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         Display::fmt(&**self, f)
     }
 }
 
 /// A wrapper type for a mutably borrowed value from a `GcCell<T>`.
-pub struct GcCellRefMut<'a, T: Trace + ?Sized + 'static> {
-    flags: &'a Cell<BorrowFlag>,
-    value: &'a mut T,
+pub struct GcCellRefMut<'a, T: Trace + ?Sized + 'static, U: ?Sized = T> {
+    gc_cell: &'a GcCell<T>,
+    value: &'a mut U,
 }
 
-impl<'a, T: Trace + ?Sized> GcCellRefMut<'a, T> {
+impl<'a, T: Trace + ?Sized, U: ?Sized> GcCellRefMut<'a, T, U> {
     /// Makes a new `GcCellRefMut` for a component of the borrowed data, e.g., an enum
     /// variant.
     ///
@@ -799,22 +815,22 @@ impl<'a, T: Trace + ?Sized> GcCellRefMut<'a, T> {
     /// let c = GcCell::new((5, 'b'));
     /// {
     ///     let b1: GcCellRefMut<(u32, char)> = c.borrow_mut();
-    ///     let mut b2: GcCellRefMut<u32> = GcCellRefMut::map(b1, |t| &mut t.0);
+    ///     let mut b2: GcCellRefMut<(u32, char), u32> = GcCellRefMut::map(b1, |t| &mut t.0);
     ///     assert_eq!(*b2, 5);
     ///     *b2 = 42;
     /// }
     /// assert_eq!(*c.borrow(), (42, 'b'));
     /// ```
     #[inline]
-    pub fn map<U, F>(orig: Self, f: F) -> GcCellRefMut<'a, U>
+    pub fn map<V, F>(orig: Self, f: F) -> GcCellRefMut<'a, T, V>
     where
-        U: Trace + ?Sized,
-        F: FnOnce(&mut T) -> &mut U,
+        V: ?Sized,
+        F: FnOnce(&mut U) -> &mut V,
     {
-        let value = unsafe { &mut *(orig.value as *mut T) };
+        let value = unsafe { &mut *(orig.value as *mut U) };
 
         let ret = GcCellRefMut {
-            flags: orig.flags,
+            gc_cell: orig.gc_cell,
             value: f(value),
         };
 
@@ -826,44 +842,46 @@ impl<'a, T: Trace + ?Sized> GcCellRefMut<'a, T> {
     }
 }
 
-impl<'a, T: Trace + ?Sized> Deref for GcCellRefMut<'a, T> {
-    type Target = T;
+impl<'a, T: Trace + ?Sized, U: ?Sized> Deref for GcCellRefMut<'a, T, U> {
+    type Target = U;
 
     #[inline]
-    fn deref(&self) -> &T {
+    fn deref(&self) -> &U {
         self.value
     }
 }
 
-impl<'a, T: Trace + ?Sized> DerefMut for GcCellRefMut<'a, T> {
+impl<'a, T: Trace + ?Sized, U: ?Sized> DerefMut for GcCellRefMut<'a, T, U> {
     #[inline]
-    fn deref_mut(&mut self) -> &mut T {
+    fn deref_mut(&mut self) -> &mut U {
         self.value
     }
 }
 
-impl<'a, T: Trace + ?Sized> Drop for GcCellRefMut<'a, T> {
+impl<'a, T: Trace + ?Sized, U: ?Sized> Drop for GcCellRefMut<'a, T, U> {
     #[inline]
     fn drop(&mut self) {
-        debug_assert!(self.flags.get().borrowed() == BorrowState::Writing);
+        debug_assert!(self.gc_cell.flags.get().borrowed() == BorrowState::Writing);
         // Restore the rooted state of the GcCell's contents to the state of the GcCell.
         // During the lifetime of the GcCellRefMut, the GcCell's contents are rooted.
-        if !self.flags.get().rooted() {
+        if !self.gc_cell.flags.get().rooted() {
             unsafe {
-                self.value.unroot();
+                (*self.gc_cell.cell.get()).unroot();
             }
         }
-        self.flags.set(self.flags.get().set_unused());
+        self.gc_cell
+            .flags
+            .set(self.gc_cell.flags.get().set_unused());
     }
 }
 
-impl<'a, T: Trace + ?Sized + Debug> Debug for GcCellRefMut<'a, T> {
+impl<'a, T: Trace + ?Sized, U: Debug + ?Sized> Debug for GcCellRefMut<'a, T, U> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         Debug::fmt(&*(self.deref()), f)
     }
 }
 
-impl<'a, T: Trace + ?Sized + Display> Display for GcCellRefMut<'a, T> {
+impl<'a, T: Trace + ?Sized, U: Display + ?Sized> Display for GcCellRefMut<'a, T, U> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         Display::fmt(&**self, f)
     }
@@ -950,18 +968,4 @@ impl<T: Trace + ?Sized + Debug> Debug for GcCell<T> {
 unsafe fn set_data_ptr<T: ?Sized, U>(mut ptr: *mut T, data: *mut U) -> *mut T {
     ptr::write(&mut ptr as *mut _ as *mut *mut u8, data as *mut u8);
     ptr
-}
-
-fn padding_needed_for_gc(align: usize) -> usize {
-    assert!(align.count_ones() == 1, "align must be a power-of-two!");
-
-    // Determine how much our header is misaligned for `align`.
-    // `align - 1` is a mask of all bits less than the alignment,
-    // as `align` is a power-of-two.
-    let misaligned = mem::size_of::<GcBox<()>>() & (align - 1);
-    if misaligned > 0 {
-        align - misaligned
-    } else {
-        0
-    }
 }

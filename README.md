@@ -3,8 +3,6 @@
 
 Simple tracing (mark and sweep) garbage collector for Rust
 
-Works, but still under construction.
-
 The design and motivation is illustrated in [this blog post](http://manishearth.github.io/blog/2015/09/01/designing-a-gc-in-rust/), with a sketch of the code [in this gist](https://gist.github.com/mystor/fa1141bfb30643289597).
 
 There is [another post](https://web.archive.org/web/20161124193746/http://blog.zhenzhang.me/2016/02/18/cgc.html) about the initial design of `cgc`, its experimental concurrent branch.
@@ -14,7 +12,7 @@ To include in your project, add the following to your Cargo.toml:
 
 ```toml
 [dependencies]
-gc = { version = "0.3", features = ["derive"] }
+gc = { version = "0.4", features = ["derive"] }
 ```
 
 This can be used pretty much like `Rc`, with the exception of interior mutability.
@@ -35,9 +33,6 @@ struct Foo {
 
 // now, `Gc<Foo>` may be used
 ```
-
-> NOTE: Finalize is automatically implemented on all types when the `nightly`
-> feature is enabled through specialization.
 
 `Finalize` may also be implemented directly on the struct, in order to add custom finalizer behavior:
 

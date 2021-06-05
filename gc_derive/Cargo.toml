@@ -1,6 +1,6 @@
 [package]
 name = "gc_derive"
-version = "0.3.6"
+version = "0.4.1"
 authors = ["Manish Goregaokar <manishsmail@gmail.com>", "Nika Layzell <nika@thelayzells.com>"]
 
 description = "Garbage collector derive plugin for rust-gc"

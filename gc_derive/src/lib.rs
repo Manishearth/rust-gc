@@ -1,5 +1,5 @@
 use quote::quote;
-use synstructure::{decl_derive, BindStyle, Structure};
+use synstructure::{decl_derive, AddBounds, BindStyle, Structure};
 
 decl_derive!([Trace, attributes(unsafe_ignore_trace, trivially_drop)] => derive_trace);
 
@@ -17,6 +17,7 @@ fn derive_trace(mut s: Structure<'_>) -> proc_macro2::TokenStream {
     });
     let trace_body = s.each(|bi| quote!(mark(#bi)));
 
+    s.add_bounds(AddBounds::Fields);
     let trace_impl = s.unsafe_bound_impl(
         quote!(::gc::Trace),
         quote! {
@@ -45,13 +46,13 @@ fn derive_trace(mut s: Structure<'_>) -> proc_macro2::TokenStream {
                 match *self { #trace_body }
             }
             #[inline] fn finalize_glue(&self) {
+                ::gc::Finalize::finalize(self);
                 #[allow(dead_code)]
                 #[inline]
                 fn mark<T: ::gc::Trace + ?Sized>(it: &T) {
                     ::gc::Trace::finalize_glue(it);
                 }
                 match *self { #trace_body }
-                ::gc::Finalize::finalize(self);
             }
         },
     );
