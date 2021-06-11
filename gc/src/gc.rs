@@ -238,6 +238,7 @@ impl Default for GcConfig {
     }
 }
 
+#[allow(dead_code)]
 pub fn configure(configurer: impl FnOnce(&mut GcConfig)) {
     GC_STATE.with(|st| {
         let mut st = st.borrow_mut();
@@ -260,6 +261,7 @@ impl Default for GcStats {
     }
 }
 
+#[allow(dead_code)]
 pub fn stats() -> GcStats {
     GC_STATE.with(|st| st.borrow().stats.clone())
 }
