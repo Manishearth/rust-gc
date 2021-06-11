@@ -3,23 +3,17 @@ use std::cell::{Cell, RefCell};
 use std::mem;
 use std::ptr::{self, NonNull};
 
-const INITIAL_THRESHOLD: usize = 100;
-
-// after collection we want the the ratio of used/total to be no
-// greater than this (the threshold grows exponentially, to avoid
-// quadratic behavior when the heap is growing linearly with the
-// number of `new` calls):
-const USED_SPACE_RATIO: f64 = 0.7;
-
 struct GcState {
-    bytes_allocated: usize,
-    threshold: usize,
+    stats: GcStats,
+    config: GcConfig,
     boxes_start: Option<NonNull<GcBox<dyn Trace>>>,
 }
 
 impl Drop for GcState {
     fn drop(&mut self) {
-        collect_garbage(self);
+        if !self.config.leak_on_drop {
+            collect_garbage(self);
+        }
         // We have no choice but to leak any remaining nodes that
         // might be referenced from other thread-local variables.
     }
@@ -46,8 +40,8 @@ pub fn finalizer_safe() -> bool {
 
 // The garbage collector's internal state.
 thread_local!(static GC_STATE: RefCell<GcState> = RefCell::new(GcState {
-    bytes_allocated: 0,
-    threshold: INITIAL_THRESHOLD,
+    stats: Default::default(),
+    config: Default::default(),
     boxes_start: None,
 }));
 
@@ -76,14 +70,17 @@ impl<T: Trace> GcBox<T> {
             let mut st = st.borrow_mut();
 
             // XXX We should probably be more clever about collecting
-            if st.bytes_allocated > st.threshold {
+            if st.stats.bytes_allocated > st.config.threshold {
                 collect_garbage(&mut *st);
 
-                if st.bytes_allocated as f64 > st.threshold as f64 * USED_SPACE_RATIO {
+                if st.stats.bytes_allocated as f64
+                    > st.config.threshold as f64 * st.config.used_space_ratio
+                {
                     // we didn't collect enough, so increase the
                     // threshold for next time, to avoid thrashing the
                     // collector too much/behaving quadratically.
-                    st.threshold = (st.bytes_allocated as f64 / USED_SPACE_RATIO) as usize
+                    st.config.threshold =
+                        (st.stats.bytes_allocated as f64 / st.config.used_space_ratio) as usize
                 }
             }
 
@@ -99,7 +96,7 @@ impl<T: Trace> GcBox<T> {
             st.boxes_start = Some(unsafe { NonNull::new_unchecked(gcbox) });
 
             // We allocated some bytes! Let's record it
-            st.bytes_allocated += mem::size_of::<GcBox<T>>();
+            st.stats.bytes_allocated += mem::size_of::<GcBox<T>>();
 
             // Return the pointer to the newly allocated data
             unsafe { NonNull::new_unchecked(gcbox) }
@@ -148,6 +145,8 @@ impl<T: Trace + ?Sized> GcBox<T> {
 
 /// Collects garbage.
 fn collect_garbage(st: &mut GcState) {
+    st.stats.collections_performed += 1;
+
     struct Unmarked {
         incoming: *mut Option<NonNull<GcBox<dyn Trace>>>,
         this: NonNull<GcBox<dyn Trace>>,
@@ -203,7 +202,7 @@ fn collect_garbage(st: &mut GcState) {
             Trace::finalize_glue(&(*node.this.as_ptr()).data);
         }
         mark(&mut st.boxes_start);
-        sweep(unmarked, &mut st.bytes_allocated);
+        sweep(unmarked, &mut st.stats.bytes_allocated);
     }
 }
 
@@ -215,4 +214,54 @@ pub fn force_collect() {
         let mut st = st.borrow_mut();
         collect_garbage(&mut *st);
     });
+}
+
+pub struct GcConfig {
+    pub threshold: usize,
+    /// after collection we want the the ratio of used/total to be no
+    /// greater than this (the threshold grows exponentially, to avoid
+    /// quadratic behavior when the heap is growing linearly with the
+    /// number of `new` calls):
+    pub used_space_ratio: f64,
+    /// For short-running processes it is not always appropriate to run
+    /// GC, sometimes it is better to let system free the resources
+    pub leak_on_drop: bool,
+}
+
+impl Default for GcConfig {
+    fn default() -> Self {
+        Self {
+            used_space_ratio: 0.7,
+            threshold: 100,
+            leak_on_drop: false,
+        }
+    }
+}
+
+#[allow(dead_code)]
+pub fn configure(configurer: impl FnOnce(&mut GcConfig)) {
+    GC_STATE.with(|st| {
+        let mut st = st.borrow_mut();
+        configurer(&mut st.config);
+    })
+}
+
+#[derive(Clone)]
+pub struct GcStats {
+    pub bytes_allocated: usize,
+    pub collections_performed: usize,
+}
+
+impl Default for GcStats {
+    fn default() -> Self {
+        Self {
+            bytes_allocated: 0,
+            collections_performed: 0,
+        }
+    }
+}
+
+#[allow(dead_code)]
+pub fn stats() -> GcStats {
+    GC_STATE.with(|st| st.borrow().stats.clone())
 }
