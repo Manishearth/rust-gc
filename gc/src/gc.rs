@@ -247,8 +247,8 @@ pub fn configure(configurer: impl FnOnce(&mut GcConfig)) {
 
 #[derive(Clone)]
 pub struct GcStats {
-    bytes_allocated: usize,
-    collections_performed: usize,
+    pub bytes_allocated: usize,
+    pub collections_performed: usize,
 }
 
 impl Default for GcStats {
