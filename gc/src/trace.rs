@@ -243,6 +243,15 @@ unsafe impl<T: Trace + ?Sized> Trace for Rc<T> {
     });
 }
 
+impl<T: Trace> Finalize for Rc<[T]> {}
+unsafe impl<T: Trace> Trace for Rc<[T]> {
+    custom_trace!(this, {
+        for e in this.iter() {
+            mark(e);
+        }
+    });
+}
+
 impl<T: Trace + ?Sized> Finalize for Box<T> {}
 unsafe impl<T: Trace + ?Sized> Trace for Box<T> {
     custom_trace!(this, {
