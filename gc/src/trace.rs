@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet, BinaryHeap, HashMap, HashSet, LinkedList, VecDeque};
 use std::hash::{BuildHasher, Hash};
+use std::marker::PhantomData;
 use std::num::{
     NonZeroI128, NonZeroI16, NonZeroI32, NonZeroI64, NonZeroI8, NonZeroIsize, NonZeroU128,
     NonZeroU16, NonZeroU32, NonZeroU64, NonZeroU8, NonZeroUsize,
@@ -210,7 +211,7 @@ macro_rules! tuple_finalize_trace {
     }
 }
 
-macro_rules! type_arg_tuple_based_finalized_trace_impls {
+macro_rules! type_arg_tuple_based_finalize_trace_impls {
     ($(($($args:ident),*);)*) => {
         $(
             fn_finalize_trace_group!($($args),*);
@@ -219,7 +220,7 @@ macro_rules! type_arg_tuple_based_finalized_trace_impls {
     }
 }
 
-type_arg_tuple_based_finalized_trace_impls![
+type_arg_tuple_based_finalize_trace_impls![
     ();
     (A);
     (A, B);
@@ -239,6 +240,15 @@ impl<T: Trace + ?Sized> Finalize for Rc<T> {}
 unsafe impl<T: Trace + ?Sized> Trace for Rc<T> {
     custom_trace!(this, {
         mark(&**this);
+    });
+}
+
+impl<T: Trace> Finalize for Rc<[T]> {}
+unsafe impl<T: Trace> Trace for Rc<[T]> {
+    custom_trace!(this, {
+        for e in this.iter() {
+            mark(e);
+        }
     });
 }
 
@@ -340,6 +350,11 @@ unsafe impl<T: Eq + Hash + Trace> Trace for LinkedList<T> {
             mark(v);
         }
     });
+}
+
+impl<T> Finalize for PhantomData<T> {}
+unsafe impl<T> Trace for PhantomData<T> {
+    unsafe_empty_trace!();
 }
 
 impl<T: Trace> Finalize for VecDeque<T> {}
