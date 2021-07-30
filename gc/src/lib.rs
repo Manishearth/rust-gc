@@ -24,6 +24,8 @@ use std::marker::Unsize;
 use std::ops::CoerceUnsized;
 
 mod gc;
+#[cfg(feature = "serde")]
+mod serde;
 mod trace;
 
 #[cfg(feature = "derive")]

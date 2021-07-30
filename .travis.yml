@@ -8,8 +8,10 @@ script:
   - cd gc
   - cargo build
   - cargo test
+  - cargo test --features serde
   - ([ $TRAVIS_RUST_VERSION != nightly ] || cargo build --features nightly)
   - ([ $TRAVIS_RUST_VERSION != nightly ] || cargo test --features nightly)
+  - ([ $TRAVIS_RUST_VERSION != nightly ] || cargo test --features nightly,serde)
 after_success: bash ../upload-docs.sh
 env:
   global:
