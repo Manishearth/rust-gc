@@ -36,6 +36,11 @@ pub use gc_derive::{Finalize, Trace};
 pub use crate::gc::{finalizer_safe, force_collect};
 pub use crate::trace::{Finalize, Trace};
 
+#[cfg(feature = "unstable-config")]
+pub use crate::gc::{configure, GcConfig};
+#[cfg(feature = "unstable-stats")]
+pub use crate::gc::{stats, GcStats};
+
 ////////
 // Gc //
 ////////
