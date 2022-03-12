@@ -85,7 +85,7 @@ impl GcBoxHeader {
     }
     
     #[inline]
-    pub fn marked(&self) -> bool { self.roots.get() & MARK_MASK != 0 }
+    pub fn is_marked(&self) -> bool { self.roots.get() & MARK_MASK != 0 }
     
     #[inline]
     pub fn mark(&self) { self.roots.set(self.roots.get() | MARK_MASK) }
@@ -150,7 +150,7 @@ impl<T: Trace + ?Sized> GcBox<T> {
 
     /// Marks this `GcBox` and marks through its data.
     pub(crate) unsafe fn trace_inner(&self) {
-        if !self.header.marked() {
+        if !self.header.is_marked() {
             self.header.mark();
             self.data.trace();
         }
@@ -198,7 +198,7 @@ fn collect_garbage(st: &mut GcState) {
         let mut unmarked = Vec::new();
         let mut unmark_head = head;
         while let Some(node) = *unmark_head {
-            if (*node.as_ptr()).header.marked() {
+            if (*node.as_ptr()).header.is_marked() {
                 (*node.as_ptr()).header.unmark();
             } else {
                 unmarked.push(Unmarked {
@@ -214,7 +214,7 @@ fn collect_garbage(st: &mut GcState) {
     unsafe fn sweep(finalized: Vec<Unmarked>, bytes_allocated: &mut usize) {
         let _guard = DropGuard::new();
         for node in finalized.into_iter().rev() {
-            if (*node.this.as_ptr()).header.marked() {
+            if (*node.this.as_ptr()).header.is_marked() {
                 continue;
             }
             let incoming = node.incoming;
