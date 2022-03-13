@@ -1,3 +1,4 @@
+use std::borrow::{Cow, ToOwned};
 use std::collections::{BTreeMap, BTreeSet, BinaryHeap, HashMap, HashSet, LinkedList, VecDeque};
 use std::hash::{BuildHasher, Hash};
 use std::marker::PhantomData;
@@ -11,7 +12,6 @@ use std::sync::atomic::{
     AtomicBool, AtomicI16, AtomicI32, AtomicI64, AtomicI8, AtomicIsize, AtomicU16, AtomicU32,
     AtomicU64, AtomicU8, AtomicUsize,
 };
-use std::borrow::{Cow, ToOwned};
 
 /// The Finalize trait, which needs to be implemented on
 /// garbage-collected objects to define finalization logic.
@@ -368,7 +368,10 @@ unsafe impl<T: Trace> Trace for VecDeque<T> {
 }
 
 impl<'a, T: ToOwned + Trace + ?Sized> Finalize for Cow<'a, T> {}
-unsafe impl<'a, T: ToOwned + Trace + ?Sized> Trace for Cow<'a, T> {
+unsafe impl<'a, T: ToOwned + Trace + ?Sized> Trace for Cow<'a, T>
+where
+    T::Owned: Trace,
+{
     custom_trace!(this, {
         if let Cow::Owned(ref v) = this {
             mark(v);
