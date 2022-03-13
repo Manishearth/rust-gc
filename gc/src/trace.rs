@@ -11,7 +11,7 @@ use std::sync::atomic::{
     AtomicBool, AtomicI16, AtomicI32, AtomicI64, AtomicI8, AtomicIsize, AtomicU16, AtomicU32,
     AtomicU64, AtomicU8, AtomicUsize,
 };
-use std::cow::Cow;
+use std::borrow::{Cow, ToOwned};
 
 /// The Finalize trait, which needs to be implemented on
 /// garbage-collected objects to define finalization logic.
