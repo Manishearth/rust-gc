@@ -368,7 +368,7 @@ unsafe impl<T: Trace> Trace for VecDeque<T> {
 }
 
 impl<'a, T: ToOwned + Trace + ?Sized> Finalize for Cow<'a, T> {}
-unsafe impl<T: ToOwned + Trace + ?Sized> Trace for Cow<'a, T> {
+unsafe impl<'a, T: ToOwned + Trace + ?Sized> Trace for Cow<'a, T> {
     custom_trace!(this, {
         if let Cow::Owned(ref v) = this {
             mark(v);
