@@ -1,3 +1,4 @@
+use std::borrow::{Cow, ToOwned};
 use std::collections::{BTreeMap, BTreeSet, BinaryHeap, HashMap, HashSet, LinkedList, VecDeque};
 use std::hash::{BuildHasher, Hash};
 use std::marker::PhantomData;
@@ -361,6 +362,18 @@ impl<T: Trace> Finalize for VecDeque<T> {}
 unsafe impl<T: Trace> Trace for VecDeque<T> {
     custom_trace!(this, {
         for v in this.iter() {
+            mark(v);
+        }
+    });
+}
+
+impl<'a, T: ToOwned + Trace + ?Sized> Finalize for Cow<'a, T> {}
+unsafe impl<'a, T: ToOwned + Trace + ?Sized> Trace for Cow<'a, T>
+where
+    T::Owned: Trace,
+{
+    custom_trace!(this, {
+        if let Cow::Owned(ref v) = this {
             mark(v);
         }
     });
