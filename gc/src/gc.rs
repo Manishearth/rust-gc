@@ -45,13 +45,61 @@ thread_local!(static GC_STATE: RefCell<GcState> = RefCell::new(GcState {
     boxes_start: None,
 }));
 
+const MARK_MASK: usize = 1 << (usize::BITS - 1);
+const ROOTS_MASK: usize = !MARK_MASK;
+const ROOTS_MAX: usize = ROOTS_MASK; // max allowed value of roots
+
 pub(crate) struct GcBoxHeader {
-    // XXX This is horribly space inefficient - not sure if we care
-    // We are using a word word bool - there is a full 63 bits of unused data :(
-    // XXX: Should be able to store marked in the high bit of roots?
-    roots: Cell<usize>,
+    roots: Cell<usize>, // high bit is used as mark flag
     next: Option<NonNull<GcBox<dyn Trace>>>,
-    marked: Cell<bool>,
+}
+
+impl GcBoxHeader {
+    #[inline]
+    pub fn new(next: Option<NonNull<GcBox<dyn Trace>>>) -> Self {
+        GcBoxHeader {
+            roots: Cell::new(1), // unmarked and roots count = 1
+            next,
+        }
+    }
+
+    #[inline]
+    pub fn roots(&self) -> usize {
+        self.roots.get() & ROOTS_MASK
+    }
+
+    #[inline]
+    pub fn inc_roots(&self) {
+        let roots = self.roots.get();
+
+        // abort if the count overflows to prevent `mem::forget` loops
+        // that could otherwise lead to erroneous drops
+        if (roots & ROOTS_MASK) < ROOTS_MAX {
+            self.roots.set(roots + 1); // we checked that this wont affect the high bit
+        } else {
+            panic!("roots counter overflow");
+        }
+    }
+
+    #[inline]
+    pub fn dec_roots(&self) {
+        self.roots.set(self.roots.get() - 1) // no underflow check
+    }
+
+    #[inline]
+    pub fn is_marked(&self) -> bool {
+        self.roots.get() & MARK_MASK != 0
+    }
+
+    #[inline]
+    pub fn mark(&self) {
+        self.roots.set(self.roots.get() | MARK_MASK)
+    }
+
+    #[inline]
+    pub fn unmark(&self) {
+        self.roots.set(self.roots.get() & !MARK_MASK)
+    }
 }
 
 #[repr(C)] // to justify the layout computation in Gc::from_raw
@@ -85,11 +133,7 @@ impl<T: Trace> GcBox<T> {
             }
 
             let gcbox = Box::into_raw(Box::new(GcBox {
-                header: GcBoxHeader {
-                    roots: Cell::new(1),
-                    marked: Cell::new(false),
-                    next: st.boxes_start.take(),
-                },
+                header: GcBoxHeader::new(st.boxes_start.take()),
                 data: value,
             }));
 
@@ -114,9 +158,8 @@ impl<T: Trace + ?Sized> GcBox<T> {
 
     /// Marks this `GcBox` and marks through its data.
     pub(crate) unsafe fn trace_inner(&self) {
-        let marked = self.header.marked.get();
-        if !marked {
-            self.header.marked.set(true);
+        if !self.header.is_marked() {
+            self.header.mark();
             self.data.trace();
         }
     }
@@ -124,17 +167,13 @@ impl<T: Trace + ?Sized> GcBox<T> {
     /// Increases the root count on this `GcBox`.
     /// Roots prevent the `GcBox` from being destroyed by the garbage collector.
     pub(crate) unsafe fn root_inner(&self) {
-        // abort if the count overflows to prevent `mem::forget` loops that could otherwise lead to
-        // erroneous drops
-        self.header
-            .roots
-            .set(self.header.roots.get().checked_add(1).unwrap());
+        self.header.inc_roots();
     }
 
     /// Decreases the root count on this `GcBox`.
     /// Roots prevent the `GcBox` from being destroyed by the garbage collector.
     pub(crate) unsafe fn unroot_inner(&self) {
-        self.header.roots.set(self.header.roots.get() - 1);
+        self.header.dec_roots();
     }
 
     /// Returns a reference to the `GcBox`'s value.
@@ -155,7 +194,7 @@ fn collect_garbage(st: &mut GcState) {
         // Walk the tree, tracing and marking the nodes
         let mut mark_head = *head;
         while let Some(node) = mark_head {
-            if (*node.as_ptr()).header.roots.get() > 0 {
+            if (*node.as_ptr()).header.roots() > 0 {
                 (*node.as_ptr()).trace_inner();
             }
 
@@ -167,8 +206,8 @@ fn collect_garbage(st: &mut GcState) {
         let mut unmarked = Vec::new();
         let mut unmark_head = head;
         while let Some(node) = *unmark_head {
-            if (*node.as_ptr()).header.marked.get() {
-                (*node.as_ptr()).header.marked.set(false);
+            if (*node.as_ptr()).header.is_marked() {
+                (*node.as_ptr()).header.unmark();
             } else {
                 unmarked.push(Unmarked {
                     incoming: unmark_head,
@@ -183,7 +222,7 @@ fn collect_garbage(st: &mut GcState) {
     unsafe fn sweep(finalized: Vec<Unmarked>, bytes_allocated: &mut usize) {
         let _guard = DropGuard::new();
         for node in finalized.into_iter().rev() {
-            if (*node.this.as_ptr()).header.marked.get() {
+            if (*node.this.as_ptr()).header.is_marked() {
                 continue;
             }
             let incoming = node.incoming;
