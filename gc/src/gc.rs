@@ -45,13 +45,12 @@ thread_local!(static GC_STATE: RefCell<GcState> = RefCell::new(GcState {
     boxes_start: None,
 }));
 
-
 const MARK_MASK: usize = 1 << (usize::BITS - 1);
 const ROOTS_MASK: usize = !MARK_MASK;
-const ROOTS_MAX: usize = ROOTS_MASK;  // max allowed value of roots
+const ROOTS_MAX: usize = ROOTS_MASK; // max allowed value of roots
 
 pub(crate) struct GcBoxHeader {
-    roots: Cell<usize>,  // high bit is used as mark flag
+    roots: Cell<usize>, // high bit is used as mark flag
     next: Option<NonNull<GcBox<dyn Trace>>>,
 }
 
@@ -63,35 +62,44 @@ impl GcBoxHeader {
             next,
         }
     }
-    
+
     #[inline]
-    pub fn roots(&self) -> usize { self.roots.get() & ROOTS_MASK }
-    
+    pub fn roots(&self) -> usize {
+        self.roots.get() & ROOTS_MASK
+    }
+
     #[inline]
     pub fn inc_roots(&self) {
         let roots = self.roots.get();
-        
-        // abort if the count overflows to prevent `mem::forget` loops 
+
+        // abort if the count overflows to prevent `mem::forget` loops
         // that could otherwise lead to erroneous drops
-        if (roots & ROOTS_MASK) < ROOTS_MAX { 
+        if (roots & ROOTS_MASK) < ROOTS_MAX {
             self.roots.set(roots + 1); // we checked that this wont affect the high bit
+        } else {
+            panic!("roots counter overflow");
         }
-        else { panic!("roots counter overflow"); }
     }
-    
+
     #[inline]
     pub fn dec_roots(&self) {
-        self.roots.set(self.roots.get() - 1)  // no underflow check
+        self.roots.set(self.roots.get() - 1) // no underflow check
     }
-    
+
     #[inline]
-    pub fn is_marked(&self) -> bool { self.roots.get() & MARK_MASK != 0 }
-    
+    pub fn is_marked(&self) -> bool {
+        self.roots.get() & MARK_MASK != 0
+    }
+
     #[inline]
-    pub fn mark(&self) { self.roots.set(self.roots.get() | MARK_MASK) }
-    
+    pub fn mark(&self) {
+        self.roots.set(self.roots.get() | MARK_MASK)
+    }
+
     #[inline]
-    pub fn unmark(&self) { self.roots.set(self.roots.get() & !MARK_MASK) }
+    pub fn unmark(&self) {
+        self.roots.set(self.roots.get() & !MARK_MASK)
+    }
 }
 
 #[repr(C)] // to justify the layout computation in Gc::from_raw
