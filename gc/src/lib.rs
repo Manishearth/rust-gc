@@ -100,9 +100,8 @@ impl<T: Trace + ?Sized> Gc<T> {
 
 /// Returns the given pointer with its root bit cleared.
 unsafe fn clear_root_bit<T: ?Sized + Trace>(ptr: NonNull<GcBox<T>>) -> NonNull<GcBox<T>> {
-    let mut ptr = ptr.as_ptr();
-    *(&mut ptr as *mut _ as *mut usize) &= !1;
-    // *(&mut ptr as *mut *const GcBox<T> as *mut usize) &= !1;
+    let ptr = ptr.as_ptr();
+    let ptr = set_data_ptr(ptr, (ptr as *mut u8 as usize & !1) as *mut u8);
     NonNull::new_unchecked(ptr)
 }
 
@@ -112,8 +111,8 @@ impl<T: Trace + ?Sized> Gc<T> {
     }
 
     unsafe fn set_root(&self) {
-        let mut ptr = self.ptr_root.get().as_ptr();
-        *(&mut ptr as *mut *mut GcBox<T> as *mut usize) |= 1;
+        let ptr = self.ptr_root.get().as_ptr();
+        let ptr = set_data_ptr(ptr, (ptr as *mut u8 as usize | 1) as *mut u8);
         self.ptr_root.set(NonNull::new_unchecked(ptr));
     }
 
