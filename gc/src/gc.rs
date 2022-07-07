@@ -6,7 +6,7 @@ use std::ptr::{self, NonNull};
 struct GcState {
     stats: GcStats,
     config: GcConfig,
-    boxes_start: Option<NonNull<GcBox<dyn Trace>>>,
+    boxes_start: Cell<Option<NonNull<GcBox<dyn Trace>>>>,
 }
 
 impl Drop for GcState {
@@ -42,7 +42,7 @@ pub fn finalizer_safe() -> bool {
 thread_local!(static GC_STATE: RefCell<GcState> = RefCell::new(GcState {
     stats: Default::default(),
     config: Default::default(),
-    boxes_start: None,
+    boxes_start: Cell::new(None),
 }));
 
 const MARK_MASK: usize = 1 << (usize::BITS - 1);
@@ -51,7 +51,7 @@ const ROOTS_MAX: usize = ROOTS_MASK; // max allowed value of roots
 
 pub(crate) struct GcBoxHeader {
     roots: Cell<usize>, // high bit is used as mark flag
-    next: Option<NonNull<GcBox<dyn Trace>>>,
+    next: Cell<Option<NonNull<GcBox<dyn Trace>>>>,
 }
 
 impl GcBoxHeader {
@@ -59,7 +59,7 @@ impl GcBoxHeader {
     pub fn new(next: Option<NonNull<GcBox<dyn Trace>>>) -> Self {
         GcBoxHeader {
             roots: Cell::new(1), // unmarked and roots count = 1
-            next,
+            next: Cell::new(next),
         }
     }
 
@@ -137,7 +137,8 @@ impl<T: Trace> GcBox<T> {
                 data: value,
             }));
 
-            st.boxes_start = Some(unsafe { NonNull::new_unchecked(gcbox) });
+            st.boxes_start
+                .set(Some(unsafe { NonNull::new_unchecked(gcbox) }));
 
             // We allocated some bytes! Let's record it
             st.stats.bytes_allocated += mem::size_of::<GcBox<T>>();
@@ -186,26 +187,26 @@ impl<T: Trace + ?Sized> GcBox<T> {
 fn collect_garbage(st: &mut GcState) {
     st.stats.collections_performed += 1;
 
-    struct Unmarked {
-        incoming: *mut Option<NonNull<GcBox<dyn Trace>>>,
+    struct Unmarked<'a> {
+        incoming: &'a Cell<Option<NonNull<GcBox<dyn Trace>>>>,
         this: NonNull<GcBox<dyn Trace>>,
     }
-    unsafe fn mark(head: &mut Option<NonNull<GcBox<dyn Trace>>>) -> Vec<Unmarked> {
+    unsafe fn mark(head: &Cell<Option<NonNull<GcBox<dyn Trace>>>>) -> Vec<Unmarked<'_>> {
         // Walk the tree, tracing and marking the nodes
-        let mut mark_head = *head;
+        let mut mark_head = head.get();
         while let Some(node) = mark_head {
             if (*node.as_ptr()).header.roots() > 0 {
                 (*node.as_ptr()).trace_inner();
             }
 
-            mark_head = (*node.as_ptr()).header.next;
+            mark_head = (*node.as_ptr()).header.next.get();
         }
 
         // Collect a vector of all of the nodes which were not marked,
         // and unmark the ones which were.
         let mut unmarked = Vec::new();
         let mut unmark_head = head;
-        while let Some(node) = *unmark_head {
+        while let Some(node) = unmark_head.get() {
             if (*node.as_ptr()).header.is_marked() {
                 (*node.as_ptr()).header.unmark();
             } else {
@@ -214,33 +215,33 @@ fn collect_garbage(st: &mut GcState) {
                     this: node,
                 });
             }
-            unmark_head = &mut (*node.as_ptr()).header.next;
+            unmark_head = &(*node.as_ptr()).header.next;
         }
         unmarked
     }
 
-    unsafe fn sweep(finalized: Vec<Unmarked>, bytes_allocated: &mut usize) {
+    unsafe fn sweep(finalized: Vec<Unmarked<'_>>, bytes_allocated: &mut usize) {
         let _guard = DropGuard::new();
         for node in finalized.into_iter().rev() {
             if (*node.this.as_ptr()).header.is_marked() {
                 continue;
             }
             let incoming = node.incoming;
-            let mut node = Box::from_raw(node.this.as_ptr());
+            let node = Box::from_raw(node.this.as_ptr());
             *bytes_allocated -= mem::size_of_val::<GcBox<_>>(&*node);
-            *incoming = node.header.next.take();
+            incoming.set(node.header.next.take());
         }
     }
 
     unsafe {
-        let unmarked = mark(&mut st.boxes_start);
+        let unmarked = mark(&st.boxes_start);
         if unmarked.is_empty() {
             return;
         }
         for node in &unmarked {
             Trace::finalize_glue(&(*node.this.as_ptr()).data);
         }
-        mark(&mut st.boxes_start);
+        mark(&st.boxes_start);
         sweep(unmarked, &mut st.stats.bytes_allocated);
     }
 }
