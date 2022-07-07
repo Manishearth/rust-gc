@@ -121,7 +121,7 @@ impl<T: Trace + ?Sized> Gc<T> {
     }
 
     #[inline]
-    fn inner(&self) -> &GcBox<T> {
+    fn inner_ptr(&self) -> *mut GcBox<T> {
         // If we are currently in the dropping phase of garbage collection,
         // it would be undefined behavior to dereference this pointer.
         // By opting into `Trace` you agree to not dereference this pointer
@@ -130,7 +130,12 @@ impl<T: Trace + ?Sized> Gc<T> {
         // This assert exists just in case.
         assert!(finalizer_safe());
 
-        unsafe { &*clear_root_bit(self.ptr_root.get()).as_ptr() }
+        unsafe { clear_root_bit(self.ptr_root.get()).as_ptr() }
+    }
+
+    #[inline]
+    fn inner(&self) -> &GcBox<T> {
+        unsafe { &*self.inner_ptr() }
     }
 }
 
@@ -152,7 +157,7 @@ impl<T: Trace + ?Sized> Gc<T> {
     /// assert_eq!(unsafe { *x_ptr }, 22);
     /// ```
     pub fn into_raw(this: Self) -> *const T {
-        let ptr: *const T = &*this;
+        let ptr: *const T = GcBox::value_ptr(this.inner_ptr());
         mem::forget(this);
         ptr
     }

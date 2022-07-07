@@ -177,6 +177,11 @@ impl<T: Trace + ?Sized> GcBox<T> {
         self.header.dec_roots();
     }
 
+    /// Returns a pointer to the `GcBox`'s value, without dereferencing it.
+    pub(crate) fn value_ptr(this: *const GcBox<T>) -> *const T {
+        unsafe { ptr::addr_of!((*this).data) }
+    }
+
     /// Returns a reference to the `GcBox`'s value.
     pub(crate) fn value(&self) -> &T {
         &self.data
