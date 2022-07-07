@@ -101,7 +101,9 @@ impl<T: Trace + ?Sized> Gc<T> {
 /// Returns the given pointer with its root bit cleared.
 unsafe fn clear_root_bit<T: ?Sized + Trace>(ptr: NonNull<GcBox<T>>) -> NonNull<GcBox<T>> {
     let ptr = ptr.as_ptr();
-    let ptr = set_data_ptr(ptr, (ptr as *mut u8 as usize & !1) as *mut u8);
+    let data = ptr as *mut u8;
+    let addr = data as isize;
+    let ptr = set_data_ptr(ptr, data.wrapping_offset((addr & !1) - addr));
     NonNull::new_unchecked(ptr)
 }
 
@@ -112,7 +114,9 @@ impl<T: Trace + ?Sized> Gc<T> {
 
     unsafe fn set_root(&self) {
         let ptr = self.ptr_root.get().as_ptr();
-        let ptr = set_data_ptr(ptr, (ptr as *mut u8 as usize | 1) as *mut u8);
+        let data = ptr as *mut u8;
+        let addr = data as isize;
+        let ptr = set_data_ptr(ptr, data.wrapping_offset((addr | 1) - addr));
         self.ptr_root.set(NonNull::new_unchecked(ptr));
     }
 
@@ -121,7 +125,7 @@ impl<T: Trace + ?Sized> Gc<T> {
     }
 
     #[inline]
-    fn inner(&self) -> &GcBox<T> {
+    fn inner_ptr(&self) -> *mut GcBox<T> {
         // If we are currently in the dropping phase of garbage collection,
         // it would be undefined behavior to dereference this pointer.
         // By opting into `Trace` you agree to not dereference this pointer
@@ -130,7 +134,12 @@ impl<T: Trace + ?Sized> Gc<T> {
         // This assert exists just in case.
         assert!(finalizer_safe());
 
-        unsafe { &*clear_root_bit(self.ptr_root.get()).as_ptr() }
+        unsafe { clear_root_bit(self.ptr_root.get()).as_ptr() }
+    }
+
+    #[inline]
+    fn inner(&self) -> &GcBox<T> {
+        unsafe { &*self.inner_ptr() }
     }
 }
 
@@ -152,7 +161,7 @@ impl<T: Trace + ?Sized> Gc<T> {
     /// assert_eq!(unsafe { *x_ptr }, 22);
     /// ```
     pub fn into_raw(this: Self) -> *const T {
-        let ptr: *const T = &*this;
+        let ptr: *const T = GcBox::value_ptr(this.inner_ptr());
         mem::forget(this);
         ptr
     }
