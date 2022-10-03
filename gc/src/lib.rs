@@ -76,7 +76,7 @@ impl<T: Trace> Gc<T> {
 
         unsafe {
             // Allocate the memory for the object
-            let ptr = GcBox::new(value);
+            let ptr = GcBox::new(value, false);
 
             // When we create a Gc<T>, all pointers which have been moved to the
             // heap no longer need to be rooted, so we unroot them.
@@ -213,6 +213,20 @@ impl<T: Trace + ?Sized> Gc<T> {
         };
         gc.set_root();
         gc
+    }
+
+    #[inline]
+    pub fn clone_weak_ref(&self) -> WeakGc<T> {
+        unsafe {
+            self.inner().root_weakly();
+            let weak_gc = WeakGc {
+                ptr_root: Cell::new(self.ptr_root.get()),
+                strong_ref_check: Cell::new(true),
+                marker:PhantomData,
+            };
+            weak_gc.set_root();
+            weak_gc
+        }
     }
 }
 
@@ -381,6 +395,167 @@ impl<T: Trace + ?Sized> std::convert::AsRef<T> for Gc<T> {
         &**self
     }
 }
+
+////////////
+// WeakGc //
+////////////
+
+/// A weak Garbage Collected pointer for an immutable value
+pub struct WeakGc<T: Trace + ?Sized + 'static> {
+    ptr_root: Cell<NonNull<GcBox<T>>>,
+    strong_ref_check: Cell<bool>,
+    marker: PhantomData<Rc<T>>,
+}
+
+impl<T: Trace> WeakGc<T> {
+    /// Crate a new Weak type Gc
+    /// 
+    /// This method can trigger a collection    
+    pub fn new(value: T) -> Self {
+        assert!(mem::align_of::<GcBox<T>>() > 1);
+
+        unsafe {
+            // Allocate the memory for the object
+            let ptr = GcBox::new(value, true);
+            // We assume when creating a WeakGc that trace_check is true until
+            // told otherwise by trace
+            (*ptr.as_ptr()).value().unroot();
+            let weak_gc = WeakGc {
+                ptr_root: Cell::new(NonNull::new_unchecked(ptr.as_ptr())),
+                strong_ref_check: Cell::new(true),
+                marker: PhantomData,
+            };
+            weak_gc.set_root();
+            weak_gc
+        }
+    }
+}
+
+impl<T: Trace + ?Sized> WeakGc<T> {
+    fn rooted(&self) -> bool {
+        self.ptr_root.get().as_ptr() as *mut u8 as usize & 1 != 0
+    }
+
+    unsafe fn set_root(&self) {
+        let ptr = self.ptr_root.get().as_ptr();
+        let data = ptr as *mut u8;
+        let addr = data as isize;
+        let ptr = set_data_ptr(ptr, data.wrapping_offset((addr | 1) - addr));
+        self.ptr_root.set(NonNull::new_unchecked(ptr));
+    }
+
+    unsafe fn clear_root(&self) {
+        self.ptr_root.set(clear_root_bit(self.ptr_root.get()));
+    }
+
+    #[inline]
+    fn inner_ptr(&self) -> *mut GcBox<T> {
+        // If we are currently in the dropping phase of garbage collection,
+        // it would be undefined behavior to dereference this pointer.
+        // By opting into `Trace` you agree to not dereference this pointer
+        // within your drop method, meaning that it should be safe.
+        //
+        // This assert exists just in case.
+        assert!(finalizer_safe());
+
+        unsafe { clear_root_bit(self.ptr_root.get()).as_ptr() }
+    }
+
+    #[inline]
+    fn inner(&self) -> &GcBox<T> {
+        unsafe { &*self.inner_ptr() }
+    }
+
+    #[inline]
+    fn set_finalized(&self) {
+        println!("Finalized was called");
+        self.strong_ref_check.set(self.inner().check_strong_refs())
+    }
+
+    fn set_traced(&self) {
+        println!("Trace was called");
+        self.strong_ref_check.set(self.inner().check_strong_refs())
+    }
+}
+
+impl<T: Trace + ?Sized> WeakGc<T> {
+    pub fn try_deref(&self) -> Option<&T> {
+        println!("{}", self.inner().check_strong_refs());
+        if self.strong_ref_check.get() {
+            Some(self.inner().value())
+        } else {
+            None
+        }
+    }
+
+    pub fn has_strong_refs(&self) -> bool {
+        self.strong_ref_check.get()
+    }
+}
+
+impl<T: Trace + ?Sized> Finalize for WeakGc<T> {
+    fn finalize(&self) {
+        println!("We are finalizing the WeakGc")
+    }
+}
+
+unsafe impl<T: Trace + ?Sized> Trace for WeakGc<T> {
+    #[inline]
+    unsafe fn trace(&self) {
+        // We set trace check here to false in the case that a trace has run and no 
+        // strong refs exist. 
+        self.set_traced();
+        self.inner().trace_inner();
+    }
+
+    #[inline]
+    unsafe fn root(&self) {
+        assert!(!self.rooted(), "Can't double-root a WeakGc<T>");
+        self.inner().root_weakly();
+        self.set_root();
+    }
+
+    #[inline]
+    unsafe fn unroot(&self) {
+        assert!(self.rooted(), "Can't double-unroot a WeakGc<T>");
+        self.inner().unroot_weakly();
+        self.clear_root();
+    }
+
+    #[inline]
+    fn finalize_glue(&self) {
+        self.set_finalized();
+        Finalize::finalize(self)
+    }
+}
+
+impl<T: Trace + ?Sized> Clone for WeakGc<T> {
+    #[inline]
+    fn clone(&self) -> Self {
+        unsafe {
+            self.inner().root_weakly();
+            let weak_gc = WeakGc {
+                ptr_root: Cell::new(self.ptr_root.get()),
+                strong_ref_check: Cell::new(true),
+                marker: PhantomData,
+            };
+            weak_gc.set_root();
+            weak_gc
+        }
+    }
+}
+
+impl<T: Trace + ?Sized> Drop for WeakGc<T> {
+    #[inline]
+    fn drop(&mut self) {
+        if self.rooted() {
+            unsafe {
+                self.inner().unroot_weakly()
+            }
+        }
+    }
+}
+
 
 ////////////
 // GcCell //
