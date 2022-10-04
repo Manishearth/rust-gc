@@ -468,8 +468,7 @@ impl<T: Trace + ?Sized> WeakGc<T> {
 }
 
 impl<T: Trace + ?Sized> WeakGc<T> {
-    pub fn try_deref(&self) -> Option<&T> {
-        println!("{}", self.inner().check_strong_refs());
+    pub fn value(&self) -> Option<&T> {
         if self.strong_ref_check.get() {
             Some(self.inner().value())
         } else {
