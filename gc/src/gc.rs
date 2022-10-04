@@ -57,10 +57,10 @@ pub(crate) struct GcBoxHeader {
 
 impl GcBoxHeader {
     #[inline]
-    pub fn new(next: Option<NonNull<GcBox<dyn Trace>>>, weak_flag:bool) -> Self {
+    pub fn new(next: Option<NonNull<GcBox<dyn Trace>>>, weak_flag: bool) -> Self {
         let weak_references = match weak_flag {
-            true=> Cell::new(1_usize),
-            false=>Cell::new(0_usize),
+            true => Cell::new(1_usize),
+            false => Cell::new(0_usize),
         };
         GcBoxHeader {
             roots: Cell::new(1), // unmarked and roots count = 1
@@ -89,7 +89,6 @@ impl GcBoxHeader {
 
     #[inline]
     pub fn dec_roots(&self) {
-        println!("Lowering the amount of roots!");
         self.roots.set(self.roots.get() - 1) // no underflow check
     }
 
@@ -111,27 +110,17 @@ impl GcBoxHeader {
     #[inline]
     pub fn inc_weak_refs(&self) {
         // Incrementing roots keeps the count and also checks that we don't exceed roots
-        println!("Incrementing! {}", self.weak_references.get());
         self.weak_references.set(self.weak_references.get() + 1);
     }
 
     #[inline]
     pub fn dec_weak_refs(&self) {
-        self.weak_references.set(self.weak_references.get() + 1);
-    }
-
-    #[inline]
-    pub fn has_weak_ref(&self) -> bool {
-        self.weak_references.get() > 0
+        self.weak_references.set(self.weak_references.get() - 1);
     }
 
     #[inline]
     pub fn get_strong_refs(&self) -> usize {
-        if self.weak_references.get() <= self.roots() {
-            self.roots() - self.weak_references.get()
-        } else {
-            0_usize
-        }
+        self.roots() - self.weak_references.get()
     }
 }
 
@@ -167,8 +156,6 @@ impl<T: Trace> GcBox<T> {
 
             let header = GcBoxHeader::new(st.boxes_start.take(), weak_flag);
 
-            println!("Newly created header: {} roots and {} weaks", header.roots(), header.weak_references.get());
-
             let gcbox = Box::into_raw(Box::new(GcBox {
                 header,
                 data: value,
@@ -197,7 +184,10 @@ impl<T: Trace + ?Sized> GcBox<T> {
     /// Marks this `GcBox` and marks through its data.
     pub(crate) unsafe fn trace_inner(&self) {
         if !self.header.is_marked() {
-            self.header.mark();
+            // Only mark the header if the strong refs(roots) outweigh the weak refs
+            if self.header.get_strong_refs() > 0 {
+                self.header.mark()
+            }
             self.data.trace();
         }
     }
@@ -227,13 +217,11 @@ impl<T: Trace + ?Sized> GcBox<T> {
     pub(crate) fn root_weakly(&self) {
         self.header.inc_roots();
         self.header.inc_weak_refs();
-        println!("roots: {} vs. weak_refs: {}", self.header.roots(), self.header.weak_references.get());
     }
 
     pub(crate) fn unroot_weakly(&self) {
         self.header.dec_roots();
         self.header.dec_weak_refs();
-        println!("roots: {} vs. weak_refs: {}", self.header.roots(), self.header.weak_references.get());
     }
 
     pub(crate) fn check_strong_refs(&self) -> bool {
@@ -253,10 +241,9 @@ fn collect_garbage(st: &mut GcState) {
         // Walk the tree, tracing and marking the nodes
         let mut mark_head = head.get();
         while let Some(node) = mark_head {
-            //println!("Running mark with roots: {} and strong_refs: {}", (*node.as_ptr()).header.roots(), (*node.as_ptr()).header.roots());
-            if (*node.as_ptr()).header.get_strong_refs() > 0 {
+            if (*node.as_ptr()).header.roots() > 0 {
                 (*node.as_ptr()).trace_inner();
-            } 
+            }
 
             mark_head = (*node.as_ptr()).header.next.get();
         }
@@ -295,10 +282,8 @@ fn collect_garbage(st: &mut GcState) {
     unsafe {
         let unmarked = mark(&st.boxes_start);
         if unmarked.is_empty() {
-            println!("Unmarked array was empty");
             return;
         }
-        println!("Unmarked wasn't empty!");
         for node in &unmarked {
             Trace::finalize_glue(&(*node.this.as_ptr()).data);
         }
@@ -313,9 +298,7 @@ fn collect_garbage(st: &mut GcState) {
 pub fn force_collect() {
     GC_STATE.with(|st| {
         let mut st = st.borrow_mut();
-        println!("Running garbage collect");
         collect_garbage(&mut *st);
-        println!("Collection Complete")
     });
 }
 

@@ -1,5 +1,5 @@
-use gc_derive::{Finalize, Trace};
 use gc::Gc;
+use gc_derive::{Finalize, Trace};
 
 // This impl should *not* require T: Trace.
 #[derive(Finalize, Trace)]

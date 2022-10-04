@@ -222,7 +222,7 @@ impl<T: Trace + ?Sized> Gc<T> {
             let weak_gc = WeakGc {
                 ptr_root: Cell::new(self.ptr_root.get()),
                 strong_ref_check: Cell::new(true),
-                marker:PhantomData,
+                marker: PhantomData,
             };
             weak_gc.set_root();
             weak_gc
@@ -409,7 +409,7 @@ pub struct WeakGc<T: Trace + ?Sized + 'static> {
 
 impl<T: Trace> WeakGc<T> {
     /// Crate a new Weak type Gc
-    /// 
+    ///
     /// This method can trigger a collection    
     pub fn new(value: T) -> Self {
         assert!(mem::align_of::<GcBox<T>>() > 1);
@@ -417,7 +417,7 @@ impl<T: Trace> WeakGc<T> {
         unsafe {
             // Allocate the memory for the object
             let ptr = GcBox::new(value, true);
-            // We assume when creating a WeakGc that trace_check is true until
+            // We assume when creating a WeakGc that strong_ref_check is true until
             // told otherwise by trace
             (*ptr.as_ptr()).value().unroot();
             let weak_gc = WeakGc {
@@ -465,17 +465,6 @@ impl<T: Trace + ?Sized> WeakGc<T> {
     fn inner(&self) -> &GcBox<T> {
         unsafe { &*self.inner_ptr() }
     }
-
-    #[inline]
-    fn set_finalized(&self) {
-        println!("Finalized was called");
-        self.strong_ref_check.set(self.inner().check_strong_refs())
-    }
-
-    fn set_traced(&self) {
-        println!("Trace was called");
-        self.strong_ref_check.set(self.inner().check_strong_refs())
-    }
 }
 
 impl<T: Trace + ?Sized> WeakGc<T> {
@@ -493,18 +482,14 @@ impl<T: Trace + ?Sized> WeakGc<T> {
     }
 }
 
-impl<T: Trace + ?Sized> Finalize for WeakGc<T> {
-    fn finalize(&self) {
-        println!("We are finalizing the WeakGc")
-    }
-}
+impl<T: Trace + ?Sized> Finalize for WeakGc<T> {}
 
 unsafe impl<T: Trace + ?Sized> Trace for WeakGc<T> {
     #[inline]
     unsafe fn trace(&self) {
-        // We set trace check here to false in the case that a trace has run and no 
-        // strong refs exist. 
-        self.set_traced();
+        // Set the strong reference here to false in the case that a trace has run and no
+        // strong refs exist.
+        self.strong_ref_check.set(self.inner().check_strong_refs());
         self.inner().trace_inner();
     }
 
@@ -524,7 +509,6 @@ unsafe impl<T: Trace + ?Sized> Trace for WeakGc<T> {
 
     #[inline]
     fn finalize_glue(&self) {
-        self.set_finalized();
         Finalize::finalize(self)
     }
 }
@@ -536,7 +520,7 @@ impl<T: Trace + ?Sized> Clone for WeakGc<T> {
             self.inner().root_weakly();
             let weak_gc = WeakGc {
                 ptr_root: Cell::new(self.ptr_root.get()),
-                strong_ref_check: Cell::new(true),
+                strong_ref_check: Cell::new(self.strong_ref_check.get()),
                 marker: PhantomData,
             };
             weak_gc.set_root();
@@ -549,13 +533,111 @@ impl<T: Trace + ?Sized> Drop for WeakGc<T> {
     #[inline]
     fn drop(&mut self) {
         if self.rooted() {
-            unsafe {
-                self.inner().unroot_weakly()
-            }
+            self.inner().unroot_weakly()
         }
     }
 }
 
+impl<T: Trace + ?Sized> Deref for WeakGc<T> {
+    type Target = T;
+
+    #[inline]
+    fn deref(&self) -> &T {
+        &self.inner().value()
+    }
+}
+
+impl<T: Trace + Default> Default for WeakGc<T> {
+    #[inline]
+    fn default() -> Self {
+        Self::new(Default::default())
+    }
+}
+
+impl<T: Trace + ?Sized + PartialEq> PartialEq for WeakGc<T> {
+    #[inline(always)]
+    fn eq(&self, other: &Self) -> bool {
+        **self == **other
+    }
+}
+
+impl<T: Trace + ?Sized + Eq> Eq for WeakGc<T> {}
+
+impl<T: Trace + ?Sized + PartialOrd> PartialOrd for WeakGc<T> {
+    #[inline(always)]
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        (**self).partial_cmp(&**other)
+    }
+
+    #[inline(always)]
+    fn lt(&self, other: &Self) -> bool {
+        **self < **other
+    }
+
+    #[inline(always)]
+    fn le(&self, other: &Self) -> bool {
+        **self <= **other
+    }
+
+    #[inline(always)]
+    fn gt(&self, other: &Self) -> bool {
+        **self > **other
+    }
+
+    #[inline(always)]
+    fn ge(&self, other: &Self) -> bool {
+        **self >= **other
+    }
+}
+
+impl<T: Trace + ?Sized + Ord> Ord for WeakGc<T> {
+    #[inline]
+    fn cmp(&self, other: &Self) -> Ordering {
+        (**self).cmp(&**other)
+    }
+}
+
+impl<T: Trace + ?Sized + Hash> Hash for WeakGc<T> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        (**self).hash(state);
+    }
+}
+
+impl<T: Trace + ?Sized + Display> Display for WeakGc<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        Display::fmt(&**self, f)
+    }
+}
+
+impl<T: Trace + ?Sized + Debug> Debug for WeakGc<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        Debug::fmt(&**self, f)
+    }
+}
+
+impl<T: Trace + ?Sized> fmt::Pointer for WeakGc<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Pointer::fmt(&self.inner(), f)
+    }
+}
+
+impl<T: Trace> From<T> for WeakGc<T> {
+    fn from(t: T) -> Self {
+        Self::new(t)
+    }
+}
+
+impl<T: Trace + ?Sized> std::borrow::Borrow<T> for WeakGc<T> {
+    fn borrow(&self) -> &T {
+        &**self
+    }
+}
+
+impl<T: Trace + ?Sized> std::convert::AsRef<T> for WeakGc<T> {
+    fn as_ref(&self) -> &T {
+        &**self
+    }
+}
 
 ////////////
 // GcCell //
@@ -813,7 +895,6 @@ unsafe impl<T: Trace + ?Sized> Trace for GcCell<T> {
         }
     }
 
-    #[inline]
     unsafe fn root(&self) {
         assert!(!self.flags.get().rooted(), "Can't root a GcCell twice!");
         self.flags.set(self.flags.get().set_rooted(true));
