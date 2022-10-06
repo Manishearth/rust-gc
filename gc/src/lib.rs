@@ -221,7 +221,7 @@ impl<T: Trace + ?Sized> Gc<T> {
             self.inner().root_weakly();
             let weak_gc = WeakGc {
                 ptr_root: Cell::new(self.ptr_root.get()),
-                strong_ref_check: Cell::new(true),
+                is_live: Cell::new(true),
                 marker: PhantomData,
             };
             weak_gc.set_root();
@@ -236,6 +236,15 @@ unsafe impl<T: Trace + ?Sized> Trace for Gc<T> {
     #[inline]
     unsafe fn trace(&self) {
         self.inner().trace_inner();
+    }
+
+    #[inline]
+    unsafe fn weak_trace(&self) -> bool {
+        let marked = match self.inner().is_marked() {
+            true => self.inner().is_marked(),
+            false => self.inner().weak_trace(),
+        };
+        marked
     }
 
     #[inline]
@@ -403,7 +412,7 @@ impl<T: Trace + ?Sized> std::convert::AsRef<T> for Gc<T> {
 /// A weak Garbage Collected pointer for an immutable value
 pub struct WeakGc<T: Trace + ?Sized + 'static> {
     ptr_root: Cell<NonNull<GcBox<T>>>,
-    strong_ref_check: Cell<bool>,
+    is_live: Cell<bool>,
     marker: PhantomData<Rc<T>>,
 }
 
@@ -422,7 +431,7 @@ impl<T: Trace> WeakGc<T> {
             (*ptr.as_ptr()).value().unroot();
             let weak_gc = WeakGc {
                 ptr_root: Cell::new(NonNull::new_unchecked(ptr.as_ptr())),
-                strong_ref_check: Cell::new(true),
+                is_live: Cell::new(true),
                 marker: PhantomData,
             };
             weak_gc.set_root();
@@ -469,7 +478,7 @@ impl<T: Trace + ?Sized> WeakGc<T> {
 
 impl<T: Trace + ?Sized> WeakGc<T> {
     pub fn value(&self) -> Option<&T> {
-        if self.strong_ref_check.get() {
+        if self.is_live.get() {
             Some(self.inner().value())
         } else {
             None
@@ -477,7 +486,7 @@ impl<T: Trace + ?Sized> WeakGc<T> {
     }
 
     pub fn has_strong_refs(&self) -> bool {
-        self.strong_ref_check.get()
+        self.is_live.get()
     }
 }
 
@@ -488,8 +497,13 @@ unsafe impl<T: Trace + ?Sized> Trace for WeakGc<T> {
     unsafe fn trace(&self) {
         // Set the strong reference here to false in the case that a trace has run and no
         // strong refs exist.
-        self.strong_ref_check.set(self.inner().check_strong_refs());
         self.inner().trace_inner();
+    }
+
+    unsafe fn weak_trace(&self) -> bool {
+        let marked = self.inner().weak_trace();
+        self.is_live.set(marked);
+        marked
     }
 
     #[inline]
@@ -519,20 +533,11 @@ impl<T: Trace + ?Sized> Clone for WeakGc<T> {
             self.inner().root_weakly();
             let weak_gc = WeakGc {
                 ptr_root: Cell::new(self.ptr_root.get()),
-                strong_ref_check: Cell::new(self.strong_ref_check.get()),
+                is_live: Cell::new(self.is_live.get()),
                 marker: PhantomData,
             };
             weak_gc.set_root();
             weak_gc
-        }
-    }
-}
-
-impl<T: Trace + ?Sized> Drop for WeakGc<T> {
-    #[inline]
-    fn drop(&mut self) {
-        if self.rooted() {
-            self.inner().unroot_weakly()
         }
     }
 }
@@ -891,6 +896,14 @@ unsafe impl<T: Trace + ?Sized> Trace for GcCell<T> {
         match self.flags.get().borrowed() {
             BorrowState::Writing => (),
             _ => (*self.cell.get()).trace(),
+        }
+    }
+
+    #[inline]
+    unsafe fn weak_trace(&self) -> bool {
+        match self.flags.get().borrowed() {
+            BorrowState::Writing => false,
+            _ => (*self.cell.get()).weak_trace(),
         }
     }
 

@@ -11,6 +11,7 @@ fn derive_trace(mut s: Structure<'_>) -> proc_macro2::TokenStream {
             .any(|attr| attr.path.is_ident("unsafe_ignore_trace"))
     });
     let trace_body = s.each(|bi| quote!(mark(#bi)));
+    let weak_trace_body = s.fold(false, |acc, bi| quote! { #acc || return mark(#bi)});
 
     s.add_bounds(AddBounds::Fields);
     let trace_impl = s.unsafe_bound_impl(
@@ -23,6 +24,14 @@ fn derive_trace(mut s: Structure<'_>) -> proc_macro2::TokenStream {
                     ::gc::Trace::trace(it);
                 }
                 match *self { #trace_body }
+            }
+            #[inline] unsafe fn weak_trace(&self) -> bool {
+                #[allow(dead_code, unreachable_code)]
+                #[inline]
+                unsafe fn mark<T: ::gc::Trace + ?Sized>(it: &T) -> bool {
+                    ::gc::Trace::weak_trace(it)
+                }
+                match *self { #weak_trace_body }
             }
             #[inline] unsafe fn root(&self) {
                 #[allow(dead_code)]

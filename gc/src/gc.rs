@@ -51,20 +51,16 @@ const ROOTS_MAX: usize = ROOTS_MASK; // max allowed value of roots
 
 pub(crate) struct GcBoxHeader {
     roots: Cell<usize>, // high bit is used as mark flag
-    weak_references: Cell<usize>,
+    weak_flag: Cell<bool>,
     next: Cell<Option<NonNull<GcBox<dyn Trace>>>>,
 }
 
 impl GcBoxHeader {
     #[inline]
     pub fn new(next: Option<NonNull<GcBox<dyn Trace>>>, weak_flag: bool) -> Self {
-        let weak_references = match weak_flag {
-            true => Cell::new(1_usize),
-            false => Cell::new(0_usize),
-        };
         GcBoxHeader {
             roots: Cell::new(1), // unmarked and roots count = 1
-            weak_references,
+            weak_flag: Cell::new(weak_flag),
             next: Cell::new(next),
         }
     }
@@ -108,19 +104,13 @@ impl GcBoxHeader {
     }
 
     #[inline]
-    pub fn inc_weak_refs(&self) {
-        // Incrementing roots keeps the count and also checks that we don't exceed roots
-        self.weak_references.set(self.weak_references.get() + 1);
+    pub fn set_weak(&self, new_flag: bool) {
+        self.weak_flag.set(new_flag);
     }
 
     #[inline]
-    pub fn dec_weak_refs(&self) {
-        self.weak_references.set(self.weak_references.get() - 1);
-    }
-
-    #[inline]
-    pub fn get_strong_refs(&self) -> usize {
-        self.roots() - self.weak_references.get()
+    pub fn is_weak(&self) -> bool {
+        self.weak_flag.get()
     }
 }
 
@@ -184,12 +174,18 @@ impl<T: Trace + ?Sized> GcBox<T> {
     /// Marks this `GcBox` and marks through its data.
     pub(crate) unsafe fn trace_inner(&self) {
         if !self.header.is_marked() {
-            // Only mark the header if the strong refs(roots) outweigh the weak refs
-            if self.header.get_strong_refs() > 0 {
-                self.header.mark()
-            }
+            self.header.mark();
             self.data.trace();
         }
+    }
+
+    /// Trace inner data
+    pub(crate) unsafe fn weak_trace(&self) -> bool {
+        let marked = self.data.weak_trace();
+        if marked {
+            self.header.mark();
+        }
+        marked
     }
 
     /// Increases the root count on this `GcBox`.
@@ -214,18 +210,16 @@ impl<T: Trace + ?Sized> GcBox<T> {
         &self.data
     }
 
+    pub(crate) fn is_marked(&self) -> bool {
+        self.header.is_marked()
+    }
+
     pub(crate) fn root_weakly(&self) {
-        self.header.inc_roots();
-        self.header.inc_weak_refs();
+        self.header.set_weak(true)
     }
 
     pub(crate) fn unroot_weakly(&self) {
-        self.header.dec_roots();
-        self.header.dec_weak_refs();
-    }
-
-    pub(crate) fn check_strong_refs(&self) -> bool {
-        self.header.get_strong_refs() > 0
+        self.header.set_weak(false);
     }
 }
 
@@ -239,13 +233,25 @@ fn collect_garbage(st: &mut GcState) {
     }
     unsafe fn mark(head: &Cell<Option<NonNull<GcBox<dyn Trace>>>>) -> Vec<Unmarked<'_>> {
         // Walk the tree, tracing and marking the nodes
+        let mut weak_nodes = Vec::new();
         let mut mark_head = head.get();
         while let Some(node) = mark_head {
             if (*node.as_ptr()).header.roots() > 0 {
                 (*node.as_ptr()).trace_inner();
             }
 
+            if (*node.as_ptr()).header.is_weak() {
+                weak_nodes.push(node);
+            }
+
             mark_head = (*node.as_ptr()).header.next.get();
+        }
+
+        // Evaluate any Weak `GcBox` to determine if it holds a reachable property
+        if weak_nodes.len() > 0 {
+            for node in weak_nodes {
+                let _weak_check = (*node.as_ptr()).weak_trace();
+            }
         }
 
         // Collect a vector of all of the nodes which were not marked,

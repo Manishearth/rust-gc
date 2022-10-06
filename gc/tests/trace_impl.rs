@@ -16,6 +16,9 @@ unsafe impl Trace for Foo {
             *m += 1;
         })
     }
+    unsafe fn weak_trace(&self) -> bool {
+        false
+    }
     unsafe fn root(&self) {}
     unsafe fn unroot(&self) {}
     fn finalize_glue(&self) {}
