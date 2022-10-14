@@ -180,7 +180,7 @@ impl<T: Trace + ?Sized> GcBox<T> {
     }
 
     /// Trace inner data
-    pub(crate) unsafe fn weak_trace(&self) -> bool {
+    pub(crate) unsafe fn weak_trace_inner(&self) -> bool {
         let marked = self.data.weak_trace();
         if marked {
             self.header.mark();
@@ -250,7 +250,7 @@ fn collect_garbage(st: &mut GcState) {
         // Evaluate any Weak `GcBox` to determine if it holds a reachable property
         if weak_nodes.len() > 0 {
             for node in weak_nodes {
-                let _weak_check = (*node.as_ptr()).weak_trace();
+                let _weak_check = (*node.as_ptr()).weak_trace_inner();
             }
         }
 

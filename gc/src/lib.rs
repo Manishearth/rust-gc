@@ -242,7 +242,7 @@ unsafe impl<T: Trace + ?Sized> Trace for Gc<T> {
     unsafe fn weak_trace(&self) -> bool {
         let marked = match self.inner().is_marked() {
             true => self.inner().is_marked(),
-            false => self.inner().weak_trace(),
+            false => self.inner().weak_trace_inner(),
         };
         marked
     }
@@ -501,7 +501,7 @@ unsafe impl<T: Trace + ?Sized> Trace for WeakGc<T> {
     }
 
     unsafe fn weak_trace(&self) -> bool {
-        let marked = self.inner().weak_trace();
+        let marked = self.inner().weak_trace_inner();
         self.is_live.set(marked);
         marked
     }

@@ -189,7 +189,7 @@ unsafe impl<T: Trace, const N: usize> Trace for [T; N] {
                 mark(v);
             }
         },
-        this.into_iter().any(|v| mark(v)) 
+        this.into_iter().any(|v| mark(v))
     );
 }
 
