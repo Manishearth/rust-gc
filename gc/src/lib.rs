@@ -6,7 +6,7 @@
 
 #![cfg_attr(feature = "nightly", feature(coerce_unsized, unsize))]
 
-use crate::gc::{GcBox, GcBoxHeader};
+use crate::gc::{GcBox, GcBoxHeader, GcBoxType};
 use std::alloc::Layout;
 use std::cell::{Cell, UnsafeCell};
 use std::cmp::Ordering;
@@ -27,9 +27,21 @@ mod gc;
 #[cfg(feature = "serde")]
 mod serde;
 mod trace;
+pub mod weak;
+
+pub use weak::{WeakGc, WeakPair};
 
 #[cfg(feature = "derive")]
 pub use gc_derive::{Finalize, Trace};
+
+/// `derive_prelude` is a quick prelude that imports
+/// `Finalize`, `Trace`, and `GcPointer` for implementing
+/// the derive
+#[cfg(feature = "derive")]
+pub mod derive_prelude {
+    pub use crate::GcPointer;
+    pub use gc_derive::{Finalize, Trace};
+}
 
 // We re-export the Trace method, as well as some useful internal methods for
 // managing collections or configuring the garbage collector.
@@ -40,6 +52,8 @@ pub use crate::trace::{Finalize, Trace};
 pub use crate::gc::{configure, GcConfig};
 #[cfg(feature = "unstable-stats")]
 pub use crate::gc::{stats, GcStats};
+
+pub type GcPointer = NonNull<GcBox<dyn Trace>>;
 
 ////////
 // Gc //
@@ -76,7 +90,7 @@ impl<T: Trace> Gc<T> {
 
         unsafe {
             // Allocate the memory for the object
-            let ptr = GcBox::new(value, false);
+            let ptr = GcBox::new(value, GcBoxType::Standard);
 
             // When we create a Gc<T>, all pointers which have been moved to the
             // heap no longer need to be rooted, so we unroot them.
@@ -99,7 +113,9 @@ impl<T: Trace + ?Sized> Gc<T> {
 }
 
 /// Returns the given pointer with its root bit cleared.
-unsafe fn clear_root_bit<T: ?Sized + Trace>(ptr: NonNull<GcBox<T>>) -> NonNull<GcBox<T>> {
+pub(crate) unsafe fn clear_root_bit<T: ?Sized + Trace>(
+    ptr: NonNull<GcBox<T>>,
+) -> NonNull<GcBox<T>> {
     let ptr = ptr.as_ptr();
     let data = ptr as *mut u8;
     let addr = data as isize;
@@ -218,13 +234,8 @@ impl<T: Trace + ?Sized> Gc<T> {
     #[inline]
     pub fn clone_weak_ref(&self) -> WeakGc<T> {
         unsafe {
-            self.inner().root_weakly();
-            let weak_gc = WeakGc {
-                ptr_root: Cell::new(self.ptr_root.get()),
-                is_live: Cell::new(true),
-                marker: PhantomData,
-            };
-            weak_gc.set_root();
+            // An Ephemeron is not rooted.
+            let weak_gc = WeakGc::from_gc_box(self.ptr_root.get());
             weak_gc
         }
     }
@@ -239,12 +250,13 @@ unsafe impl<T: Trace + ?Sized> Trace for Gc<T> {
     }
 
     #[inline]
-    unsafe fn weak_trace(&self) -> bool {
-        let marked = match self.inner().is_marked() {
-            true => self.inner().is_marked(),
-            false => self.inner().weak_trace_inner(),
-        };
-        marked
+    unsafe fn is_marked_ephemeron(&self) -> bool {
+        false
+    }
+
+    #[inline]
+    unsafe fn weak_trace(&self, queue: &mut Vec<GcPointer>) {
+        self.inner().weak_trace_inner(queue);
     }
 
     #[inline]
@@ -400,244 +412,6 @@ impl<T: Trace + ?Sized> std::borrow::Borrow<T> for Gc<T> {
 }
 
 impl<T: Trace + ?Sized> std::convert::AsRef<T> for Gc<T> {
-    fn as_ref(&self) -> &T {
-        &**self
-    }
-}
-
-////////////
-// WeakGc //
-////////////
-
-/// A weak Garbage Collected pointer for an immutable value
-pub struct WeakGc<T: Trace + ?Sized + 'static> {
-    ptr_root: Cell<NonNull<GcBox<T>>>,
-    is_live: Cell<bool>,
-    marker: PhantomData<Rc<T>>,
-}
-
-impl<T: Trace> WeakGc<T> {
-    /// Crate a new Weak type Gc
-    ///
-    /// This method can trigger a collection    
-    pub fn new(value: T) -> Self {
-        assert!(mem::align_of::<GcBox<T>>() > 1);
-
-        unsafe {
-            // Allocate the memory for the object
-            let ptr = GcBox::new(value, true);
-            // We assume when creating a WeakGc that strong_ref_check is true until
-            // told otherwise by trace
-            (*ptr.as_ptr()).value().unroot();
-            let weak_gc = WeakGc {
-                ptr_root: Cell::new(NonNull::new_unchecked(ptr.as_ptr())),
-                is_live: Cell::new(true),
-                marker: PhantomData,
-            };
-            weak_gc.set_root();
-            weak_gc
-        }
-    }
-}
-
-impl<T: Trace + ?Sized> WeakGc<T> {
-    fn rooted(&self) -> bool {
-        self.ptr_root.get().as_ptr() as *mut u8 as usize & 1 != 0
-    }
-
-    unsafe fn set_root(&self) {
-        let ptr = self.ptr_root.get().as_ptr();
-        let data = ptr as *mut u8;
-        let addr = data as isize;
-        let ptr = set_data_ptr(ptr, data.wrapping_offset((addr | 1) - addr));
-        self.ptr_root.set(NonNull::new_unchecked(ptr));
-    }
-
-    unsafe fn clear_root(&self) {
-        self.ptr_root.set(clear_root_bit(self.ptr_root.get()));
-    }
-
-    #[inline]
-    fn inner_ptr(&self) -> *mut GcBox<T> {
-        // If we are currently in the dropping phase of garbage collection,
-        // it would be undefined behavior to dereference this pointer.
-        // By opting into `Trace` you agree to not dereference this pointer
-        // within your drop method, meaning that it should be safe.
-        //
-        // This assert exists just in case.
-        assert!(finalizer_safe());
-
-        unsafe { clear_root_bit(self.ptr_root.get()).as_ptr() }
-    }
-
-    #[inline]
-    fn inner(&self) -> &GcBox<T> {
-        unsafe { &*self.inner_ptr() }
-    }
-}
-
-impl<T: Trace + ?Sized> WeakGc<T> {
-    pub fn value(&self) -> Option<&T> {
-        if self.is_live.get() {
-            Some(self.inner().value())
-        } else {
-            None
-        }
-    }
-
-    pub fn has_strong_refs(&self) -> bool {
-        self.is_live.get()
-    }
-}
-
-impl<T: Trace + ?Sized> Finalize for WeakGc<T> {}
-
-unsafe impl<T: Trace + ?Sized> Trace for WeakGc<T> {
-    #[inline]
-    unsafe fn trace(&self) {
-        // Set the strong reference here to false in the case that a trace has run and no
-        // strong refs exist.
-        self.inner().trace_inner();
-    }
-
-    unsafe fn weak_trace(&self) -> bool {
-        let marked = self.inner().weak_trace_inner();
-        self.is_live.set(marked);
-        marked
-    }
-
-    #[inline]
-    unsafe fn root(&self) {
-        assert!(!self.rooted(), "Can't double-root a WeakGc<T>");
-        self.inner().root_weakly();
-        self.set_root();
-    }
-
-    #[inline]
-    unsafe fn unroot(&self) {
-        assert!(self.rooted(), "Can't double-unroot a WeakGc<T>");
-        self.inner().unroot_weakly();
-        self.clear_root();
-    }
-
-    #[inline]
-    fn finalize_glue(&self) {
-        Finalize::finalize(self)
-    }
-}
-
-impl<T: Trace + ?Sized> Clone for WeakGc<T> {
-    #[inline]
-    fn clone(&self) -> Self {
-        unsafe {
-            self.inner().root_weakly();
-            let weak_gc = WeakGc {
-                ptr_root: Cell::new(self.ptr_root.get()),
-                is_live: Cell::new(self.is_live.get()),
-                marker: PhantomData,
-            };
-            weak_gc.set_root();
-            weak_gc
-        }
-    }
-}
-
-impl<T: Trace + ?Sized> Deref for WeakGc<T> {
-    type Target = T;
-
-    #[inline]
-    fn deref(&self) -> &T {
-        &self.inner().value()
-    }
-}
-
-impl<T: Trace + Default> Default for WeakGc<T> {
-    #[inline]
-    fn default() -> Self {
-        Self::new(Default::default())
-    }
-}
-
-impl<T: Trace + ?Sized + PartialEq> PartialEq for WeakGc<T> {
-    #[inline(always)]
-    fn eq(&self, other: &Self) -> bool {
-        **self == **other
-    }
-}
-
-impl<T: Trace + ?Sized + Eq> Eq for WeakGc<T> {}
-
-impl<T: Trace + ?Sized + PartialOrd> PartialOrd for WeakGc<T> {
-    #[inline(always)]
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        (**self).partial_cmp(&**other)
-    }
-
-    #[inline(always)]
-    fn lt(&self, other: &Self) -> bool {
-        **self < **other
-    }
-
-    #[inline(always)]
-    fn le(&self, other: &Self) -> bool {
-        **self <= **other
-    }
-
-    #[inline(always)]
-    fn gt(&self, other: &Self) -> bool {
-        **self > **other
-    }
-
-    #[inline(always)]
-    fn ge(&self, other: &Self) -> bool {
-        **self >= **other
-    }
-}
-
-impl<T: Trace + ?Sized + Ord> Ord for WeakGc<T> {
-    #[inline]
-    fn cmp(&self, other: &Self) -> Ordering {
-        (**self).cmp(&**other)
-    }
-}
-
-impl<T: Trace + ?Sized + Hash> Hash for WeakGc<T> {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        (**self).hash(state);
-    }
-}
-
-impl<T: Trace + ?Sized + Display> Display for WeakGc<T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        Display::fmt(&**self, f)
-    }
-}
-
-impl<T: Trace + ?Sized + Debug> Debug for WeakGc<T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        Debug::fmt(&**self, f)
-    }
-}
-
-impl<T: Trace + ?Sized> fmt::Pointer for WeakGc<T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Pointer::fmt(&self.inner(), f)
-    }
-}
-
-impl<T: Trace> From<T> for WeakGc<T> {
-    fn from(t: T) -> Self {
-        Self::new(t)
-    }
-}
-
-impl<T: Trace + ?Sized> std::borrow::Borrow<T> for WeakGc<T> {
-    fn borrow(&self) -> &T {
-        &**self
-    }
-}
-
-impl<T: Trace + ?Sized> std::convert::AsRef<T> for WeakGc<T> {
     fn as_ref(&self) -> &T {
         &**self
     }
@@ -900,10 +674,15 @@ unsafe impl<T: Trace + ?Sized> Trace for GcCell<T> {
     }
 
     #[inline]
-    unsafe fn weak_trace(&self) -> bool {
+    unsafe fn is_marked_ephemeron(&self) -> bool {
+        false
+    }
+
+    #[inline]
+    unsafe fn weak_trace(&self, queue: &mut Vec<GcPointer>) {
         match self.flags.get().borrowed() {
-            BorrowState::Writing => false,
-            _ => (*self.cell.get()).weak_trace(),
+            BorrowState::Writing => (),
+            _ => (*self.cell.get()).weak_trace(queue),
         }
     }
 
@@ -1248,7 +1027,7 @@ impl<T: Trace + ?Sized + Debug> Debug for GcCell<T> {
 //
 // For a slice/trait object, this sets the `data` field and leaves the rest
 // unchanged. For a sized raw pointer, this simply sets the pointer.
-unsafe fn set_data_ptr<T: ?Sized, U>(mut ptr: *mut T, data: *mut U) -> *mut T {
+pub(crate) unsafe fn set_data_ptr<T: ?Sized, U>(mut ptr: *mut T, data: *mut U) -> *mut T {
     ptr::write(&mut ptr as *mut _ as *mut *mut u8, data as *mut u8);
     ptr
 }

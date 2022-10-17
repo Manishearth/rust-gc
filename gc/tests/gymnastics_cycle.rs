@@ -1,4 +1,4 @@
-use gc::{force_collect, Gc, GcCell};
+use gc::{force_collect, Gc, GcCell, GcPointer};
 use gc_derive::Trace;
 use std::cell::Cell;
 

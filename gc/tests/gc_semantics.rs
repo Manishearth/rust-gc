@@ -1,4 +1,4 @@
-use gc::{force_collect, Finalize, Gc, GcCell, Trace};
+use gc::{force_collect, Finalize, Gc, GcCell, GcPointer, Trace};
 use gc_derive::{Finalize, Trace};
 use std::cell::Cell;
 use std::thread::LocalKey;
@@ -75,13 +75,15 @@ unsafe impl Trace for GcWatch {
             f.set(of);
         });
     }
-    unsafe fn weak_trace(&self) -> bool {
+    unsafe fn is_marked_ephemeron(&self) -> bool {
+        false
+    }
+    unsafe fn weak_trace(&self, queue: &mut Vec<GcPointer>) {
         self.0.with(|f| {
             let mut of = f.get();
             of.weak_trace += 1;
             f.set(of)
         });
-        false
     }
     unsafe fn root(&self) {
         self.0.with(|f| {

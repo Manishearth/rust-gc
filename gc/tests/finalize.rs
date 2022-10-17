@@ -1,4 +1,4 @@
-use gc::{Finalize, Trace};
+use gc::{Finalize, GcPointer, Trace};
 use gc_derive::{Finalize, Trace};
 use std::cell::Cell;
 

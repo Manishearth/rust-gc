@@ -1,4 +1,4 @@
-use gc::Gc;
+use gc::{Gc, GcPointer};
 use gc_derive::{Finalize, Trace};
 
 // This impl should *not* require T: Trace.

@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 thread_local!(static X: RefCell<u8> = RefCell::new(0));
 
-use gc::Trace;
+use gc::{GcPointer, Trace};
 
 #[derive(Copy, Clone, Finalize)]
 struct Foo;
@@ -16,9 +16,10 @@ unsafe impl Trace for Foo {
             *m += 1;
         })
     }
-    unsafe fn weak_trace(&self) -> bool {
+    unsafe fn is_marked_ephemeron(&self) -> bool {
         false
     }
+    unsafe fn weak_trace(&self, queue: &mut Vec<GcPointer>) {}
     unsafe fn root(&self) {}
     unsafe fn unroot(&self) {}
     fn finalize_glue(&self) {}
