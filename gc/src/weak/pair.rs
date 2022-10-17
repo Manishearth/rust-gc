@@ -17,7 +17,6 @@ use std::rc::Rc;
 // WeakPair //
 //////////////
 
-
 // The WeakPair struct is a garbage collected pointer to an Ephemeron<K, V>
 pub struct WeakPair<T: Trace + ?Sized + 'static> {
     ptr_root: Cell<NonNull<GcBox<Ephemeron<T>>>>,

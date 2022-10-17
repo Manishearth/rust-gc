@@ -1,5 +1,4 @@
 use crate::trace::Trace;
-use crate::weak::Ephemeron;
 use crate::Finalize;
 use std::cell::{Cell, RefCell};
 use std::mem;
@@ -305,7 +304,7 @@ fn collect_garbage(st: &mut GcState) {
             // prior to finalization as they could have been marked by a different
             // trace after initially being added to the queue
             if !(*node.as_ptr()).header.is_marked() {
-                Finalize::finalize(&(*node.as_ptr()).data)
+                Trace::finalize_glue(&(*node.as_ptr()).data)
             }
         }
     }

@@ -78,7 +78,7 @@ unsafe impl Trace for GcWatch {
     unsafe fn is_marked_ephemeron(&self) -> bool {
         false
     }
-    unsafe fn weak_trace(&self, queue: &mut Vec<GcPointer>) {
+    unsafe fn weak_trace(&self, _queue: &mut Vec<GcPointer>) {
         self.0.with(|f| {
             let mut of = f.get();
             of.weak_trace += 1;
