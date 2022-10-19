@@ -232,7 +232,7 @@ impl<T: Trace + ?Sized> Gc<T> {
     }
 
     #[inline]
-    pub fn clone_weak_ref(&self) -> WeakGc<T> {
+    pub fn clone_weak_gc(&self) -> WeakGc<T> {
         unsafe {
             // An Ephemeron is not rooted.
             let weak_gc = WeakGc::from_gc_box(self.ptr_root.get());

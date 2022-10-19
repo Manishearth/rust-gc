@@ -7,11 +7,9 @@ use std::cell::Cell;
 use std::cmp::Ordering;
 use std::fmt::{self, Debug, Display};
 use std::hash::{Hash, Hasher};
-use std::marker::PhantomData;
 use std::mem;
 use std::ops::Deref;
 use std::ptr::NonNull;
-use std::rc::Rc;
 
 ////////////
 // WeakGc //
@@ -22,8 +20,7 @@ use std::rc::Rc;
 /// This implementation uses an Ephemeron as a generalized weak
 /// box to trace and sweep the inner values.
 pub struct WeakGc<T: Trace + ?Sized + 'static> {
-    ptr_root: Cell<NonNull<GcBox<Ephemeron<T>>>>,
-    marker: PhantomData<Rc<T>>,
+    ptr_root: Cell<NonNull<GcBox<Ephemeron<T, ()>>>>,
 }
 
 impl<T: Trace> WeakGc<T> {
@@ -35,13 +32,12 @@ impl<T: Trace> WeakGc<T> {
 
         unsafe {
             // Allocate the memory for the object
-            let eph_value = Ephemeron::new_weak(value);
+            let eph_value = Ephemeron::<T,()>::new_weak(value);
             let ptr = GcBox::new(eph_value, GcBoxType::Ephemeron);
 
             (*ptr.as_ptr()).value().unroot();
             let weak_gc = WeakGc {
                 ptr_root: Cell::new(NonNull::new_unchecked(ptr.as_ptr())),
-                marker: PhantomData,
             };
             weak_gc.set_root();
             weak_gc
@@ -67,7 +63,7 @@ impl<T: Trace + ?Sized> WeakGc<T> {
     }
 
     #[inline]
-    fn inner_ptr(&self) -> *mut GcBox<Ephemeron<T>> {
+    fn inner_ptr(&self) -> *mut GcBox<Ephemeron<T, ()>> {
         // If we are currently in the dropping phase of garbage collection,
         // it would be undefined behavior to dereference this pointer.
         // By opting into `Trace` you agree to not dereference this pointer
@@ -80,7 +76,7 @@ impl<T: Trace + ?Sized> WeakGc<T> {
     }
 
     #[inline]
-    fn inner(&self) -> &GcBox<Ephemeron<T>> {
+    fn inner(&self) -> &GcBox<Ephemeron<T, ()>> {
         unsafe { &*self.inner_ptr() }
     }
 }
@@ -94,12 +90,11 @@ impl<T: Trace + ?Sized> WeakGc<T> {
     #[inline]
     pub(crate) fn from_gc_box(gc_box: NonNull<GcBox<T>>) -> Self {
         unsafe {
-            let eph = Ephemeron::weak_from_gc_box(gc_box);
+            let eph = Ephemeron::<T,()>::weak_from_gc_box(gc_box);
             let ptr = GcBox::new(eph, GcBoxType::Ephemeron);
 
             let weak_gc = WeakGc {
                 ptr_root: Cell::new(NonNull::new_unchecked(ptr.as_ptr())),
-                marker: PhantomData,
             };
             weak_gc.set_root();
             weak_gc
@@ -154,7 +149,6 @@ impl<T: Trace + ?Sized> Clone for WeakGc<T> {
         unsafe {
             let weak_gc = WeakGc {
                 ptr_root: Cell::new(self.ptr_root.get()),
-                marker: PhantomData,
             };
             weak_gc.set_root();
             weak_gc

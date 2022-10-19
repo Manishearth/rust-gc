@@ -18,35 +18,35 @@ use std::ptr::NonNull;
 ///   - Phase Two: Trace keys of queued ephemerons. If reachable,
 ///
 /// [Reference]: https://docs.racket-lang.org/reference/ephemerons.html#%28tech._ephemeron%29
-pub struct Ephemeron<T: Trace + ?Sized + 'static> {
-    key: Cell<NonNull<GcBox<T>>>,
-    value: Cell<Option<NonNull<GcBox<T>>>>,
+pub struct Ephemeron<K: Trace + ?Sized + 'static, V: Trace + ?Sized + 'static> {
+    key: Cell<NonNull<GcBox<K>>>,
+    value: Cell<Option<NonNull<GcBox<V>>>>,
 }
 
-impl<T: Trace> Ephemeron<T> {
-    pub(crate) fn new_weak(value: T) -> Self {
-        assert!(mem::align_of::<GcBox<T>>() > 1);
+impl<K: Trace, V: Trace> Ephemeron<K, V> {
+    pub(crate) fn new_weak(value: K) -> Ephemeron<K, ()> {
+        assert!(mem::align_of::<GcBox<K>>() > 1);
 
         unsafe {
             let ptr = GcBox::new(value, GcBoxType::Weak);
 
             let ephem = Ephemeron {
                 key: Cell::new(NonNull::new_unchecked(ptr.as_ptr())),
-                value: Cell::new(None),
+                value: Cell::new(None)
             };
             ephem.set_root();
             ephem
         }
     }
 
-    pub(crate) fn new_weak_pair(key: T, value: Option<T>) -> Self {
-        assert!(mem::align_of::<GcBox<T>>() > 1);
+    pub(crate) fn new_weak_pair(key: K, value: Option<V>) -> Ephemeron<K, V> {
+        assert!(mem::align_of::<GcBox<K>>() > 1);
 
         unsafe {
             let key_ptr = GcBox::new(key, GcBoxType::Weak);
             let value = if let Some(v) = value {
-                let val_ptr = GcBox::new(v, GcBoxType::Weak);
-                Cell::new(Some(NonNull::new_unchecked(val_ptr.as_ptr())))
+                let new_gc_box = GcBox::new(v, GcBoxType::Weak);
+                Cell::new(Some(NonNull::new_unchecked(new_gc_box.as_ptr())))
             } else {
                 Cell::new(None)
             };
@@ -61,40 +61,25 @@ impl<T: Trace> Ephemeron<T> {
     }
 
     #[inline]
-    pub(crate) fn set_value(&self, value: Option<T>) {
+    pub fn set_value(&self, value: V) {
         unsafe {
-            if let Some(v) = value {
-                let val_ptr = GcBox::new(v, GcBoxType::Weak);
-                self.value
-                    .set(Some(NonNull::new_unchecked(val_ptr.as_ptr())));
-            } else {
-                self.value.set(None);
-            }
+            let new_value = GcBox::new(value, GcBoxType::Weak);
+            self.value.set(Some(NonNull::new_unchecked(new_value.as_ptr())));
         }
     }
+
 }
 
-impl<T: Trace + ?Sized> Ephemeron<T> {
-    #[inline]
-    pub(crate) fn weak_from_gc_box(value: NonNull<GcBox<T>>) -> Self {
-        unsafe {
-            let ephem = Ephemeron {
-                key: Cell::new(NonNull::new_unchecked(value.as_ptr())),
-                value: Cell::new(None),
-            };
-            ephem.set_root();
-            ephem
-        }
-    }
+impl<K: Trace + ?Sized, V: Trace + ?Sized> Ephemeron<K, V> {
 
     #[inline]
-    pub(crate) fn weak_pair_from_gc_boxes(
-        key: NonNull<GcBox<T>>,
-        value: Option<NonNull<GcBox<T>>>,
-    ) -> Self {
+    pub(crate) fn new_pair_from_gc_pointers(
+        key: NonNull<GcBox<K>>,
+        value: Option<NonNull<GcBox<V>>>,
+    ) -> Ephemeron<K, V> {
         unsafe {
-            let value = if let Some(val) = value {
-                Cell::new(Some(NonNull::new_unchecked(val.as_ptr())))
+            let value = if let Some(v) = value {
+                Cell::new(Some(NonNull::new_unchecked(v.as_ptr())))
             } else {
                 Cell::new(None)
             };
@@ -102,6 +87,18 @@ impl<T: Trace + ?Sized> Ephemeron<T> {
             let ephem = Ephemeron {
                 key: Cell::new(NonNull::new_unchecked(key.as_ptr())),
                 value,
+            };
+            ephem.set_root();
+            ephem
+        }
+    }
+
+    #[inline]
+    pub(crate) fn weak_from_gc_box(value: NonNull<GcBox<K>>) -> Ephemeron<K, ()> {
+        unsafe {
+            let ephem = Ephemeron {
+                key: Cell::new(NonNull::new_unchecked(value.as_ptr())),
+                value: Cell::new(None),
             };
             ephem.set_root();
             ephem
@@ -130,13 +127,13 @@ impl<T: Trace + ?Sized> Ephemeron<T> {
     }
 
     #[inline]
-    fn inner_key_ptr(&self) -> *mut GcBox<T> {
+    fn inner_key_ptr(&self) -> *mut GcBox<K> {
         assert!(finalizer_safe());
         unsafe { clear_root_bit(self.key.get()).as_ptr() }
     }
 
     #[inline]
-    fn inner_value_ptr(&self) -> Option<*mut GcBox<T>> {
+    fn inner_value_ptr(&self) -> Option<*mut GcBox<V>> {
         assert!(finalizer_safe());
 
         if let Some(gc_box) = self.value.get() {
@@ -148,12 +145,12 @@ impl<T: Trace + ?Sized> Ephemeron<T> {
     }
 
     #[inline]
-    fn inner_key(&self) -> &GcBox<T> {
+    fn inner_key(&self) -> &GcBox<K> {
         unsafe { &*self.inner_key_ptr() }
     }
 
     #[inline]
-    fn inner_value(&self) -> Option<&GcBox<T>> {
+    fn inner_value(&self) -> Option<&GcBox<V>> {
         unsafe {
             if let Some(inner_value) = self.inner_value_ptr() {
                 Some(&*inner_value)
@@ -164,12 +161,12 @@ impl<T: Trace + ?Sized> Ephemeron<T> {
     }
 
     #[inline]
-    pub fn key_value(&self) -> &T {
+    pub fn key_value(&self) -> &K {
         self.inner_key().value()
     }
 
     #[inline]
-    pub fn value(&self) -> Option<&T> {
+    pub fn value(&self) -> Option<&V> {
         if let Some(gcbox) = self.inner_value() {
             Some(gcbox.value())
         } else {
@@ -185,14 +182,19 @@ impl<T: Trace + ?Sized> Ephemeron<T> {
     #[inline]
     unsafe fn weak_trace_value(&self, queue: &mut Vec<GcPointer>) {
         if let Some(gcbox) = self.inner_value() {
-            gcbox.weak_trace_inner(queue)
+            gcbox.weak_trace_inner(queue);
         }
     }
 }
 
-impl<T: Trace + ?Sized> Finalize for Ephemeron<T> {}
+impl<K: Trace + ?Sized, V: Trace + ?Sized> Finalize for Ephemeron<K, V> {
+    #[inline]
+    fn finalize(&self) {
+        self.value.set(None)
+    }
+}
 
-unsafe impl<T: Trace + ?Sized> Trace for Ephemeron<T> {
+unsafe impl<K: Trace + ?Sized, V: Trace + ?Sized> Trace for Ephemeron<K, V> {
     #[inline]
     unsafe fn trace(&self) {
         /* An ephemeron is never traced with Phase One Trace */

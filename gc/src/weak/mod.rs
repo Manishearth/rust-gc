@@ -12,9 +12,9 @@ pub(crate) use ephemeron::Ephemeron;
 pub use pair::WeakPair;
 pub use weak_gc::WeakGc;
 
-pub(crate) unsafe fn clear_root_bit<T: ?Sized + Trace>(
-    ptr: NonNull<GcBox<Ephemeron<T>>>,
-) -> NonNull<GcBox<Ephemeron<T>>> {
+pub(crate) unsafe fn clear_root_bit<K: ?Sized + Trace, V: ?Sized + Trace>(
+    ptr: NonNull<GcBox<Ephemeron<K, V>>>,
+) -> NonNull<GcBox<Ephemeron<K, V>>> {
     let ptr = ptr.as_ptr();
     let data = ptr as *mut u8;
     let addr = data as isize;

@@ -4,31 +4,26 @@ pub use crate::trace::{Finalize, Trace};
 use crate::weak::{clear_root_bit, Ephemeron};
 use crate::{set_data_ptr, GcPointer};
 use std::cell::Cell;
-use std::cmp::Ordering;
-use std::fmt::{self, Debug, Display};
-use std::hash::{Hash, Hasher};
-use std::marker::PhantomData;
+use std::fmt;
 use std::mem;
 use std::ops::Deref;
 use std::ptr::NonNull;
-use std::rc::Rc;
 
 //////////////
 // WeakPair //
 //////////////
 
 // The WeakPair struct is a garbage collected pointer to an Ephemeron<K, V>
-pub struct WeakPair<T: Trace + ?Sized + 'static> {
-    ptr_root: Cell<NonNull<GcBox<Ephemeron<T>>>>,
-    marker: PhantomData<Rc<T>>,
+pub struct WeakPair<K: Trace + ?Sized + 'static, V: Trace + ?Sized + 'static> {
+    ptr_root: Cell<NonNull<GcBox<Ephemeron<K, V>>>>,
 }
 
-impl<T: Trace> WeakPair<T> {
+impl<K: Trace, V: Trace> WeakPair<K, V> {
     /// Crate a new Weak type Gc
     ///
     /// This method can trigger a collection    
-    pub fn new(key: T, value: Option<T>) -> Self {
-        assert!(mem::align_of::<GcBox<T>>() > 1);
+    pub fn new(key: K, value: Option<V>) -> Self {
+        assert!(mem::align_of::<GcBox<V>>() > 1);
 
         unsafe {
             // Allocate the memory for the object
@@ -38,7 +33,6 @@ impl<T: Trace> WeakPair<T> {
             (*ptr.as_ptr()).value().unroot();
             let weak_gc = WeakPair {
                 ptr_root: Cell::new(NonNull::new_unchecked(ptr.as_ptr())),
-                marker: PhantomData,
             };
             weak_gc.set_root();
             weak_gc
@@ -46,12 +40,12 @@ impl<T: Trace> WeakPair<T> {
     }
 
     #[inline]
-    pub fn set_value(&self, value: Option<T>) {
+    pub fn set_value(&self, value: V) {
         self.inner().value().set_value(value)
     }
 }
 
-impl<T: Trace + ?Sized> WeakPair<T> {
+impl<K: Trace + ?Sized, V: Trace + ?Sized> WeakPair<K,V> {
     fn rooted(&self) -> bool {
         self.ptr_root.get().as_ptr() as *mut u8 as usize & 1 != 0
     }
@@ -69,7 +63,7 @@ impl<T: Trace + ?Sized> WeakPair<T> {
     }
 
     #[inline]
-    fn inner_ptr(&self) -> *mut GcBox<Ephemeron<T>> {
+    fn inner_ptr(&self) -> *mut GcBox<Ephemeron<K,V>> {
         // If we are currently in the dropping phase of garbage collection,
         // it would be undefined behavior to dereference this pointer.
         // By opting into `Trace` you agree to not dereference this pointer
@@ -82,36 +76,35 @@ impl<T: Trace + ?Sized> WeakPair<T> {
     }
 
     #[inline]
-    fn inner(&self) -> &GcBox<Ephemeron<T>> {
+    fn inner(&self) -> &GcBox<Ephemeron<K, V>> {
         unsafe { &*self.inner_ptr() }
     }
 }
 
-impl<T: Trace + ?Sized> WeakPair<T> {
+impl<K: Trace + ?Sized, V: Trace + ?Sized> WeakPair<K,V> {
     #[inline]
-    pub fn key_value(&self) -> &T {
+    pub fn key_value(&self) -> &K {
         self.inner().value().key_value()
     }
 
     #[inline]
-    pub fn value(&self) -> Option<&T> {
+    pub fn value(&self) -> Option<&V> {
         self.inner().value().value()
     }
 
     #[inline]
-    pub fn value_tuple(&self) -> (&T, Option<&T>) {
+    pub fn value_tuple(&self) -> (&K, Option<&V>) {
         (self.key_value(), self.value())
     }
 
     #[inline]
-    pub(crate) fn from_gc_boxes(key: NonNull<GcBox<T>>, value: Option<NonNull<GcBox<T>>>) -> Self {
+    pub(crate) fn from_gc_boxes(key: NonNull<GcBox<K>>, value: Option<NonNull<GcBox<V>>>) -> Self {
         unsafe {
-            let eph = Ephemeron::weak_pair_from_gc_boxes(key, value);
+            let eph = Ephemeron::new_pair_from_gc_pointers(key, value);
             let ptr = GcBox::new(eph, GcBoxType::Ephemeron);
 
             let weak_gc = WeakPair {
                 ptr_root: Cell::new(NonNull::new_unchecked(ptr.as_ptr())),
-                marker: PhantomData,
             };
             weak_gc.set_root();
             weak_gc
@@ -119,9 +112,9 @@ impl<T: Trace + ?Sized> WeakPair<T> {
     }
 }
 
-impl<T: Trace + ?Sized> Finalize for WeakPair<T> {}
+impl<K: Trace + ?Sized, V: Trace + ?Sized> Finalize for WeakPair<K,V> {}
 
-unsafe impl<T: Trace + ?Sized> Trace for WeakPair<T> {
+unsafe impl<K: Trace + ?Sized, V: Trace + ?Sized> Trace for WeakPair<K,V> {
     #[inline]
     unsafe fn trace(&self) {
         // Set the strong reference here to false in the case that a trace has run and no
@@ -144,13 +137,13 @@ unsafe impl<T: Trace + ?Sized> Trace for WeakPair<T> {
 
     #[inline]
     unsafe fn root(&self) {
-        assert!(!self.rooted(), "Can't double-root a WeakPair<T>");
+        assert!(!self.rooted(), "Can't double-root a WeakPair<K,V>");
         self.set_root();
     }
 
     #[inline]
     unsafe fn unroot(&self) {
-        assert!(self.rooted(), "Can't double-unroot a WeakPair<T>");
+        assert!(self.rooted(), "Can't double-unroot a WeakPair<K,V>");
         self.clear_root();
     }
 
@@ -160,13 +153,12 @@ unsafe impl<T: Trace + ?Sized> Trace for WeakPair<T> {
     }
 }
 
-impl<T: Trace + ?Sized> Clone for WeakPair<T> {
+impl<K: Trace + ?Sized, V: Trace + ?Sized> Clone for WeakPair<K,V> {
     #[inline]
     fn clone(&self) -> Self {
         unsafe {
             let weak_gc = WeakPair {
                 ptr_root: Cell::new(self.ptr_root.get()),
-                marker: PhantomData,
             };
             weak_gc.set_root();
             weak_gc
@@ -174,84 +166,23 @@ impl<T: Trace + ?Sized> Clone for WeakPair<T> {
     }
 }
 
-impl<T: Trace + ?Sized> Deref for WeakPair<T> {
-    type Target = T;
+impl<K: Trace + ?Sized, V: Trace + ?Sized> Deref for WeakPair<K,V> {
+    type Target = K;
 
     #[inline]
-    fn deref(&self) -> &T {
+    fn deref(&self) -> &K {
         &self.inner().value().key_value()
     }
 }
 
-impl<T: Trace + Default> Default for WeakPair<T> {
+impl<K: Trace + Default, V: Trace + Default> Default for WeakPair<K,V> {
     #[inline]
     fn default() -> Self {
         Self::new(Default::default(), Default::default())
     }
 }
 
-impl<T: Trace + ?Sized + PartialEq> PartialEq for WeakPair<T> {
-    #[inline(always)]
-    fn eq(&self, other: &Self) -> bool {
-        **self == **other
-    }
-}
-
-impl<T: Trace + ?Sized + Eq> Eq for WeakPair<T> {}
-
-impl<T: Trace + ?Sized + PartialOrd> PartialOrd for WeakPair<T> {
-    #[inline(always)]
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        (**self).partial_cmp(&**other)
-    }
-
-    #[inline(always)]
-    fn lt(&self, other: &Self) -> bool {
-        **self < **other
-    }
-
-    #[inline(always)]
-    fn le(&self, other: &Self) -> bool {
-        **self <= **other
-    }
-
-    #[inline(always)]
-    fn gt(&self, other: &Self) -> bool {
-        **self > **other
-    }
-
-    #[inline(always)]
-    fn ge(&self, other: &Self) -> bool {
-        **self >= **other
-    }
-}
-
-impl<T: Trace + ?Sized + Ord> Ord for WeakPair<T> {
-    #[inline]
-    fn cmp(&self, other: &Self) -> Ordering {
-        (**self).cmp(&**other)
-    }
-}
-
-impl<T: Trace + ?Sized + Hash> Hash for WeakPair<T> {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        (**self).hash(state);
-    }
-}
-
-impl<T: Trace + ?Sized + Display> Display for WeakPair<T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        Display::fmt(&**self, f)
-    }
-}
-
-impl<T: Trace + ?Sized + Debug> Debug for WeakPair<T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        Debug::fmt(&**self, f)
-    }
-}
-
-impl<T: Trace + ?Sized> fmt::Pointer for WeakPair<T> {
+impl<K: Trace + ?Sized, V: Trace + ?Sized> fmt::Pointer for WeakPair<K,V> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Pointer::fmt(&self.inner(), f)
     }
@@ -259,14 +190,14 @@ impl<T: Trace + ?Sized> fmt::Pointer for WeakPair<T> {
 
 // TODO: implement FROM trait for WeakPair
 
-impl<T: Trace + ?Sized> std::borrow::Borrow<T> for WeakPair<T> {
-    fn borrow(&self) -> &T {
+impl<K: Trace + ?Sized, V: Trace + ?Sized> std::borrow::Borrow<K> for WeakPair<K,V> {
+    fn borrow(&self) -> &K {
         &**self
     }
 }
 
-impl<T: Trace + ?Sized> std::convert::AsRef<T> for WeakPair<T> {
-    fn as_ref(&self) -> &T {
+impl<K: Trace + ?Sized, V: Trace + ?Sized> std::convert::AsRef<K> for WeakPair<K,V> {
+    fn as_ref(&self) -> &K {
         &**self
     }
 }

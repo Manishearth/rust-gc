@@ -1,5 +1,4 @@
 use crate::trace::Trace;
-use crate::Finalize;
 use std::cell::{Cell, RefCell};
 use std::mem;
 use std::ptr::{self, NonNull};
