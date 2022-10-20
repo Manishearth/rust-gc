@@ -137,7 +137,7 @@ impl<K: Trace + ?Sized, V: Trace + ?Sized> Ephemeron<K, V> {
         assert!(finalizer_safe());
 
         if let Some(gc_box) = self.value.get() {
-            let val = unsafe { gc_box.as_ptr() };
+            let val =  gc_box.as_ptr();
             Some(val)
         } else {
             None

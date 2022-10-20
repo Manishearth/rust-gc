@@ -98,7 +98,7 @@ impl<K: Trace + ?Sized, V: Trace + ?Sized> WeakPair<K,V> {
     }
 
     #[inline]
-    pub(crate) fn from_gc_pair(key: NonNull<GcBox<K>>, value: Option<NonNull<GcBox<V>>>) -> Self {
+    pub fn from_gc_pair(key: NonNull<GcBox<K>>, value: Option<NonNull<GcBox<V>>>) -> Self {
         unsafe {
             let eph = Ephemeron::new_pair_from_gc_pointers(key, value);
             let ptr = GcBox::new(eph, GcBoxType::Ephemeron);
