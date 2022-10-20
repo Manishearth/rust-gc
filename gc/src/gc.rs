@@ -3,7 +3,7 @@ use std::cell::{Cell, RefCell};
 use std::mem;
 use std::ptr::{self, NonNull};
 
-struct GcState {
+pub(crate) struct GcState {
     stats: GcStats,
     config: GcConfig,
     boxes_start: Cell<Option<NonNull<GcBox<dyn Trace>>>>,
@@ -45,12 +45,19 @@ thread_local!(static GC_STATE: RefCell<GcState> = RefCell::new(GcState {
     boxes_start: Cell::new(None),
 }));
 
+pub enum GcBoxType {
+    Standard,
+    Weak,
+    Ephemeron,
+}
+
 const MARK_MASK: usize = 1 << (usize::BITS - 1);
 const ROOTS_MASK: usize = !MARK_MASK;
 const ROOTS_MAX: usize = ROOTS_MASK; // max allowed value of roots
 
 pub(crate) struct GcBoxHeader {
     roots: Cell<usize>, // high bit is used as mark flag
+    ephemeron_flag: Cell<bool>,
     next: Cell<Option<NonNull<GcBox<dyn Trace>>>>,
 }
 
@@ -59,6 +66,25 @@ impl GcBoxHeader {
     pub fn new(next: Option<NonNull<GcBox<dyn Trace>>>) -> Self {
         GcBoxHeader {
             roots: Cell::new(1), // unmarked and roots count = 1
+            ephemeron_flag: Cell::new(false),
+            next: Cell::new(next),
+        }
+    }
+
+    #[inline]
+    pub fn new_ephemeron(next: Option<NonNull<GcBox<dyn Trace>>>) -> Self {
+        GcBoxHeader {
+            roots: Cell::new(0),
+            ephemeron_flag: Cell::new(true),
+            next: Cell::new(next),
+        }
+    }
+
+    #[inline]
+    pub fn new_weak(next: Option<NonNull<GcBox<dyn Trace>>>) -> Self {
+        GcBoxHeader {
+            roots: Cell::new(0),
+            ephemeron_flag: Cell::new(false),
             next: Cell::new(next),
         }
     }
@@ -100,53 +126,17 @@ impl GcBoxHeader {
     pub fn unmark(&self) {
         self.roots.set(self.roots.get() & !MARK_MASK)
     }
+
+    #[inline]
+    pub fn is_ephemeron(&self) -> bool {
+        self.ephemeron_flag.get()
+    }
 }
 
 #[repr(C)] // to justify the layout computation in Gc::from_raw
-pub(crate) struct GcBox<T: Trace + ?Sized + 'static> {
+pub struct GcBox<T: Trace + ?Sized + 'static> {
     header: GcBoxHeader,
     data: T,
-}
-
-impl<T: Trace> GcBox<T> {
-    /// Allocates a garbage collected `GcBox` on the heap,
-    /// and appends it to the thread-local `GcBox` chain.
-    ///
-    /// A `GcBox` allocated this way starts its life rooted.
-    pub(crate) fn new(value: T) -> NonNull<Self> {
-        GC_STATE.with(|st| {
-            let mut st = st.borrow_mut();
-
-            // XXX We should probably be more clever about collecting
-            if st.stats.bytes_allocated > st.config.threshold {
-                collect_garbage(&mut *st);
-
-                if st.stats.bytes_allocated as f64
-                    > st.config.threshold as f64 * st.config.used_space_ratio
-                {
-                    // we didn't collect enough, so increase the
-                    // threshold for next time, to avoid thrashing the
-                    // collector too much/behaving quadratically.
-                    st.config.threshold =
-                        (st.stats.bytes_allocated as f64 / st.config.used_space_ratio) as usize
-                }
-            }
-
-            let gcbox = Box::into_raw(Box::new(GcBox {
-                header: GcBoxHeader::new(st.boxes_start.take()),
-                data: value,
-            }));
-
-            st.boxes_start
-                .set(Some(unsafe { NonNull::new_unchecked(gcbox) }));
-
-            // We allocated some bytes! Let's record it
-            st.stats.bytes_allocated += mem::size_of::<GcBox<T>>();
-
-            // Return the pointer to the newly allocated data
-            unsafe { NonNull::new_unchecked(gcbox) }
-        })
-    }
 }
 
 impl<T: Trace + ?Sized> GcBox<T> {
@@ -159,10 +149,15 @@ impl<T: Trace + ?Sized> GcBox<T> {
 
     /// Marks this `GcBox` and marks through its data.
     pub(crate) unsafe fn trace_inner(&self) {
-        if !self.header.is_marked() {
+        if !self.header.is_marked() && !self.header.is_ephemeron() {
             self.header.mark();
             self.data.trace();
         }
+    }
+
+    /// Trace inner data
+    pub(crate) unsafe fn weak_trace_inner(&self, queue: &mut Vec<NonNull<GcBox<dyn Trace>>>) {
+        self.data.weak_trace(queue);
     }
 
     /// Increases the root count on this `GcBox`.
@@ -186,68 +181,161 @@ impl<T: Trace + ?Sized> GcBox<T> {
     pub(crate) fn value(&self) -> &T {
         &self.data
     }
+
+    pub(crate) fn is_marked(&self) -> bool {
+        self.header.is_marked()
+    }
+}
+
+impl<T: Trace> GcBox<T> {
+    /// Allocates a garbage collected `GcBox` on the heap,
+    /// and appends it to the thread-local `GcBox` chain.
+    ///
+    /// A `GcBox` allocated this way starts its life rooted.
+    pub(crate) fn new(value: T, box_type: GcBoxType) -> NonNull<Self> {
+        GC_STATE.with(|st| {
+            let mut st = st.borrow_mut();
+
+            // XXX We should probably be more clever about collecting
+            if st.stats.bytes_allocated > st.config.threshold {
+                collect_garbage(&mut *st);
+
+                if st.stats.bytes_allocated as f64
+                    > st.config.threshold as f64 * st.config.used_space_ratio
+                {
+                    // we didn't collect enough, so increase the
+                    // threshold for next time, to avoid thrashing the
+                    // collector too much/behaving quadratically.
+                    st.config.threshold =
+                        (st.stats.bytes_allocated as f64 / st.config.used_space_ratio) as usize
+                }
+            }
+
+            let header = match box_type {
+                GcBoxType::Standard => GcBoxHeader::new(st.boxes_start.take()),
+                GcBoxType::Weak => GcBoxHeader::new_weak(st.boxes_start.take()),
+                GcBoxType::Ephemeron => GcBoxHeader::new_ephemeron(st.boxes_start.take()),
+            };
+
+            let gcbox = Box::into_raw(Box::new(GcBox {
+                header,
+                data: value,
+            }));
+
+            st.boxes_start
+                .set(Some(unsafe { NonNull::new_unchecked(gcbox) }));
+
+            // We allocated some bytes! Let's record it
+            st.stats.bytes_allocated += mem::size_of::<GcBox<T>>();
+
+            // Return the pointer to the newly allocated data
+            unsafe { NonNull::new_unchecked(gcbox) }
+        })
+    }
 }
 
 /// Collects garbage.
 fn collect_garbage(st: &mut GcState) {
     st.stats.collections_performed += 1;
 
-    struct Unmarked<'a> {
-        incoming: &'a Cell<Option<NonNull<GcBox<dyn Trace>>>>,
-        this: NonNull<GcBox<dyn Trace>>,
-    }
-    unsafe fn mark(head: &Cell<Option<NonNull<GcBox<dyn Trace>>>>) -> Vec<Unmarked<'_>> {
+    unsafe fn mark(
+        head: &Cell<Option<NonNull<GcBox<dyn Trace>>>>,
+    ) -> Vec<NonNull<GcBox<dyn Trace>>> {
         // Walk the tree, tracing and marking the nodes
-        let mut mark_head = head.get();
-        while let Some(node) = mark_head {
-            if (*node.as_ptr()).header.roots() > 0 {
-                (*node.as_ptr()).trace_inner();
+        let mut finalize = Vec::new();
+        let mut ephemeron_queue = Vec::new();
+        let mut mark_head = head;
+        while let Some(node) = mark_head.get() {
+            if (*node.as_ptr()).header.is_ephemeron() {
+                ephemeron_queue.push(node);
+            } else {
+                if (*node.as_ptr()).header.roots() > 0 {
+                    (*node.as_ptr()).trace_inner();
+                } else {
+                    finalize.push(node)
+                }
             }
-
-            mark_head = (*node.as_ptr()).header.next.get();
+            mark_head = &(*node.as_ptr()).header.next;
         }
 
-        // Collect a vector of all of the nodes which were not marked,
-        // and unmark the ones which were.
-        let mut unmarked = Vec::new();
-        let mut unmark_head = head;
-        while let Some(node) = unmark_head.get() {
+        // Ephemeron Evaluation
+        if !ephemeron_queue.is_empty() {
+            loop {
+                let mut reachable_nodes = Vec::new();
+                let mut other_nodes = Vec::new();
+                // iterate through ephemeron queue, sorting nodes by whether they
+                // are reachable or unreachable<?>
+                for node in ephemeron_queue {
+                    if (*node.as_ptr()).data.is_marked_ephemeron() {
+                        (*node.as_ptr()).header.mark();
+                        reachable_nodes.push(node);
+                    } else {
+                        other_nodes.push(node);
+                    }
+                }
+                // Replace the old queue with the unreachable<?>
+                ephemeron_queue = other_nodes;
+
+                // If reachable nodes is not empty, trace values. If it is empty,
+                // break from the loop
+                if !reachable_nodes.is_empty() {
+                    // iterate through reachable nodes and trace their values,
+                    // enqueuing any ephemeron that is found during the trace
+                    for node in reachable_nodes {
+                        (*node.as_ptr()).weak_trace_inner(&mut ephemeron_queue)
+                    }
+                } else {
+                    break;
+                }
+            }
+        }
+
+        // Any left over nodes in the ephemeron queue at this point are
+        // unreachable and need to be notified/finalized.
+        finalize.extend(ephemeron_queue);
+
+        finalize
+    }
+
+    unsafe fn finalize(finalize_vec: Vec<NonNull<GcBox<dyn Trace>>>) {
+        for node in finalize_vec {
+            // We double check that the unreachable nodes are actually unreachable
+            // prior to finalization as they could have been marked by a different
+            // trace after initially being added to the queue
+            if !(*node.as_ptr()).header.is_marked() {
+                Trace::finalize_glue(&(*node.as_ptr()).data)
+            }
+        }
+    }
+
+    unsafe fn sweep(head: &Cell<Option<NonNull<GcBox<dyn Trace>>>>, bytes_allocated: &mut usize) {
+        let _guard = DropGuard::new();
+
+        let mut sweep_head = head;
+        while let Some(node) = sweep_head.get() {
             if (*node.as_ptr()).header.is_marked() {
                 (*node.as_ptr()).header.unmark();
+                sweep_head = &(*node.as_ptr()).header.next;
             } else {
-                unmarked.push(Unmarked {
-                    incoming: unmark_head,
-                    this: node,
-                });
+                let unmarked_node = Box::from_raw(node.as_ptr());
+                *bytes_allocated -= mem::size_of_val::<GcBox<_>>(&*unmarked_node);
+                sweep_head.set(unmarked_node.header.next.take());
             }
-            unmark_head = &(*node.as_ptr()).header.next;
-        }
-        unmarked
-    }
-
-    unsafe fn sweep(finalized: Vec<Unmarked<'_>>, bytes_allocated: &mut usize) {
-        let _guard = DropGuard::new();
-        for node in finalized.into_iter().rev() {
-            if (*node.this.as_ptr()).header.is_marked() {
-                continue;
-            }
-            let incoming = node.incoming;
-            let node = Box::from_raw(node.this.as_ptr());
-            *bytes_allocated -= mem::size_of_val::<GcBox<_>>(&*node);
-            incoming.set(node.header.next.take());
         }
     }
 
     unsafe {
-        let unmarked = mark(&st.boxes_start);
-        if unmarked.is_empty() {
-            return;
-        }
-        for node in &unmarked {
-            Trace::finalize_glue(&(*node.this.as_ptr()).data);
-        }
-        mark(&st.boxes_start);
-        sweep(unmarked, &mut st.stats.bytes_allocated);
+        // Run mark and return vector of nonreachable porperties
+        let unreachable_nodes = mark(&st.boxes_start);
+        // Finalize the unreachable properties
+        finalize(unreachable_nodes);
+        // Run mark again to mark any nodes that are resurrected by their finalizer
+        //
+        // At this point, _f should be filled with all nodes that are unreachable and
+        // have already been finalized, so they can be ignored.
+        let _f = mark(&st.boxes_start);
+        // Run sweep: unmarking all marked nodes and freeing any unmarked nodes
+        sweep(&st.boxes_start, &mut st.stats.bytes_allocated);
     }
 }
 

@@ -6,7 +6,7 @@
 
 #![cfg_attr(feature = "nightly", feature(coerce_unsized, unsize))]
 
-use crate::gc::{GcBox, GcBoxHeader};
+use crate::gc::{GcBox, GcBoxHeader, GcBoxType};
 use std::alloc::Layout;
 use std::cell::{Cell, UnsafeCell};
 use std::cmp::Ordering;
@@ -27,9 +27,21 @@ mod gc;
 #[cfg(feature = "serde")]
 mod serde;
 mod trace;
+pub mod weak;
+
+pub use weak::{WeakGc, WeakPair};
 
 #[cfg(feature = "derive")]
 pub use gc_derive::{Finalize, Trace};
+
+/// `derive_prelude` is a quick prelude that imports
+/// `Finalize`, `Trace`, and `GcPointer` for implementing
+/// the derive
+#[cfg(feature = "derive")]
+pub mod derive_prelude {
+    pub use crate::GcPointer;
+    pub use gc_derive::{Finalize, Trace};
+}
 
 // We re-export the Trace method, as well as some useful internal methods for
 // managing collections or configuring the garbage collector.
@@ -40,6 +52,8 @@ pub use crate::trace::{Finalize, Trace};
 pub use crate::gc::{configure, GcConfig};
 #[cfg(feature = "unstable-stats")]
 pub use crate::gc::{stats, GcStats};
+
+pub type GcPointer = NonNull<GcBox<dyn Trace>>;
 
 ////////
 // Gc //
@@ -76,7 +90,7 @@ impl<T: Trace> Gc<T> {
 
         unsafe {
             // Allocate the memory for the object
-            let ptr = GcBox::new(value);
+            let ptr = GcBox::new(value, GcBoxType::Standard);
 
             // When we create a Gc<T>, all pointers which have been moved to the
             // heap no longer need to be rooted, so we unroot them.
@@ -99,7 +113,9 @@ impl<T: Trace + ?Sized> Gc<T> {
 }
 
 /// Returns the given pointer with its root bit cleared.
-unsafe fn clear_root_bit<T: ?Sized + Trace>(ptr: NonNull<GcBox<T>>) -> NonNull<GcBox<T>> {
+pub(crate) unsafe fn clear_root_bit<T: ?Sized + Trace>(
+    ptr: NonNull<GcBox<T>>,
+) -> NonNull<GcBox<T>> {
     let ptr = ptr.as_ptr();
     let data = ptr as *mut u8;
     let addr = data as isize;
@@ -214,6 +230,23 @@ impl<T: Trace + ?Sized> Gc<T> {
         gc.set_root();
         gc
     }
+
+    #[inline]
+    pub fn clone_weak_gc(&self) -> WeakGc<T> {
+        unsafe {
+            let weak_gc = WeakGc::from_gc_box(self.ptr_root.get());
+            weak_gc
+        }
+    }
+
+    #[inline]
+    pub fn create_weak_pair<V>(&self, value: Option<V>) -> WeakPair<T, V>
+    where
+        V: Trace,
+    {
+        let weak_pair = WeakPair::from_gc_value_pair(self.ptr_root.get(), value);
+        weak_pair
+    }
 }
 
 impl<T: Trace + ?Sized> Finalize for Gc<T> {}
@@ -222,6 +255,16 @@ unsafe impl<T: Trace + ?Sized> Trace for Gc<T> {
     #[inline]
     unsafe fn trace(&self) {
         self.inner().trace_inner();
+    }
+
+    #[inline]
+    unsafe fn is_marked_ephemeron(&self) -> bool {
+        false
+    }
+
+    #[inline]
+    unsafe fn weak_trace(&self, queue: &mut Vec<GcPointer>) {
+        self.inner().weak_trace_inner(queue);
     }
 
     #[inline]
@@ -639,6 +682,18 @@ unsafe impl<T: Trace + ?Sized> Trace for GcCell<T> {
     }
 
     #[inline]
+    unsafe fn is_marked_ephemeron(&self) -> bool {
+        false
+    }
+
+    #[inline]
+    unsafe fn weak_trace(&self, queue: &mut Vec<GcPointer>) {
+        match self.flags.get().borrowed() {
+            BorrowState::Writing => (),
+            _ => (*self.cell.get()).weak_trace(queue),
+        }
+    }
+
     unsafe fn root(&self) {
         assert!(!self.flags.get().rooted(), "Can't root a GcCell twice!");
         self.flags.set(self.flags.get().set_rooted(true));
@@ -980,7 +1035,7 @@ impl<T: Trace + ?Sized + Debug> Debug for GcCell<T> {
 //
 // For a slice/trait object, this sets the `data` field and leaves the rest
 // unchanged. For a sized raw pointer, this simply sets the pointer.
-unsafe fn set_data_ptr<T: ?Sized, U>(mut ptr: *mut T, data: *mut U) -> *mut T {
+pub(crate) unsafe fn set_data_ptr<T: ?Sized, U>(mut ptr: *mut T, data: *mut U) -> *mut T {
     ptr::write(&mut ptr as *mut _ as *mut *mut u8, data as *mut u8);
     ptr
 }

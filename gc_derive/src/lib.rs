@@ -11,6 +11,7 @@ fn derive_trace(mut s: Structure<'_>) -> proc_macro2::TokenStream {
             .any(|attr| attr.path.is_ident("unsafe_ignore_trace"))
     });
     let trace_body = s.each(|bi| quote!(mark(#bi)));
+    let weak_trace_body = s.each(|bi| quote!(mark(#bi, queue)));
 
     s.add_bounds(AddBounds::Fields);
     let trace_impl = s.unsafe_bound_impl(
@@ -23,6 +24,17 @@ fn derive_trace(mut s: Structure<'_>) -> proc_macro2::TokenStream {
                     ::gc::Trace::trace(it);
                 }
                 match *self { #trace_body }
+            }
+            #[inline] unsafe fn is_marked_ephemeron(&self) -> bool {
+                false
+            }
+            #[inline] unsafe fn weak_trace(&self, queue: &mut Vec<GcPointer>) {
+                #[allow(dead_code, unreachable_code)]
+                #[inline]
+                unsafe fn mark<T: ::gc::Trace + ?Sized>(it: &T, queue: &mut Vec<::gc::GcPointer>) {
+                    ::gc::Trace::weak_trace(it, queue)
+                }
+                match *self { #weak_trace_body }
             }
             #[inline] unsafe fn root(&self) {
                 #[allow(dead_code)]
