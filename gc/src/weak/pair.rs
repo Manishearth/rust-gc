@@ -98,7 +98,7 @@ impl<K: Trace + ?Sized, V: Trace + ?Sized> WeakPair<K,V> {
     }
 
     #[inline]
-    pub(crate) fn from_gc_boxes(key: NonNull<GcBox<K>>, value: Option<NonNull<GcBox<V>>>) -> Self {
+    pub(crate) fn from_gc_pair(key: NonNull<GcBox<K>>, value: Option<NonNull<GcBox<V>>>) -> Self {
         unsafe {
             let eph = Ephemeron::new_pair_from_gc_pointers(key, value);
             let ptr = GcBox::new(eph, GcBoxType::Ephemeron);
@@ -108,6 +108,29 @@ impl<K: Trace + ?Sized, V: Trace + ?Sized> WeakPair<K,V> {
             };
             weak_gc.set_root();
             weak_gc
+        }
+    }
+}
+
+impl<K: Trace + ?Sized, V: Trace> WeakPair<K, V> {
+    #[inline]
+    pub(crate) fn from_gc_value_pair(key:NonNull<GcBox<K>>, value: Option<V>) -> Self {
+        unsafe {
+            let value_ptr = if let Some(v) = value {
+                let gcbox = GcBox::new(v, GcBoxType::Weak);
+                Some(NonNull::new_unchecked(gcbox.as_ptr()))
+            } else {
+                None
+            };
+
+            let eph = Ephemeron::new_pair_from_gc_pointers(key, value_ptr);
+            let ptr = GcBox::new(eph, GcBoxType::Ephemeron);
+
+            let weak_pair = WeakPair {
+                ptr_root: Cell::new(NonNull::new_unchecked(ptr.as_ptr())),
+            };
+            weak_pair.set_root();
+            weak_pair
         }
     }
 }

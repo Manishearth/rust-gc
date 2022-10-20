@@ -1,4 +1,4 @@
-use gc::{Gc, GcCell, GcPointer, WeakGc};
+use gc::{Gc, GcCell, WeakGc};
 
 #[test]
 fn weak_gc_try_deref_some_value() {
@@ -17,13 +17,10 @@ fn weak_gc_from_existing() {
 fn weak_gc_different_copies() {
     let gc = Gc::new(GcCell::new(1));
     let weak_gc1 = gc.clone_weak_gc();
-    let weak_gc2 = weak_gc1.clone();
+    let _weak_gc2 = weak_gc1.clone();
 
     {
         let _weak_gc3 = WeakGc::new(GcCell::new(2));
         gc::force_collect();
     }
 }
-
-#[test]
-fn weak_gc_

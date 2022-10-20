@@ -234,10 +234,18 @@ impl<T: Trace + ?Sized> Gc<T> {
     #[inline]
     pub fn clone_weak_gc(&self) -> WeakGc<T> {
         unsafe {
-            // An Ephemeron is not rooted.
             let weak_gc = WeakGc::from_gc_box(self.ptr_root.get());
             weak_gc
         }
+    }
+
+    #[inline]
+    pub fn create_weak_pair<V>(&self, value: Option<V>) -> WeakPair<T, V>
+    where
+        V: Trace,
+    {
+        let weak_pair = WeakPair::from_gc_value_pair(self.ptr_root.get(), value);
+        weak_pair
     }
 }
 

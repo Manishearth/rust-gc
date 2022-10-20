@@ -19,7 +19,7 @@ unsafe impl Trace for Foo {
     unsafe fn is_marked_ephemeron(&self) -> bool {
         false
     }
-    unsafe fn weak_trace(&self, queue: &mut Vec<GcPointer>) {}
+    unsafe fn weak_trace(&self, _queue: &mut Vec<GcPointer>) {}
     unsafe fn root(&self) {}
     unsafe fn unroot(&self) {}
     fn finalize_glue(&self) {}
