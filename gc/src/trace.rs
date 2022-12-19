@@ -135,7 +135,7 @@ simple_empty_finalize_trace![
     f64,
     char,
     String,
-    Box<str>,
+    str,
     Rc<str>,
     Path,
     PathBuf,
@@ -244,10 +244,10 @@ unsafe impl<T: Trace + ?Sized> Trace for Box<T> {
     });
 }
 
-impl<T: Trace> Finalize for Box<[T]> {}
-unsafe impl<T: Trace> Trace for Box<[T]> {
+impl<T: Trace> Finalize for [T] {}
+unsafe impl<T: Trace> Trace for [T] {
     custom_trace!(this, {
-        for e in this.iter() {
+        for e in this {
             mark(e);
         }
     });
@@ -337,8 +337,8 @@ unsafe impl<T: Eq + Hash + Trace> Trace for LinkedList<T> {
     });
 }
 
-impl<T> Finalize for PhantomData<T> {}
-unsafe impl<T> Trace for PhantomData<T> {
+impl<T: ?Sized> Finalize for PhantomData<T> {}
+unsafe impl<T: ?Sized> Trace for PhantomData<T> {
     unsafe_empty_trace!();
 }
 
