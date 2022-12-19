@@ -337,8 +337,8 @@ unsafe impl<T: Eq + Hash + Trace> Trace for LinkedList<T> {
     });
 }
 
-impl<T> Finalize for PhantomData<T> {}
-unsafe impl<T> Trace for PhantomData<T> {
+impl<T: ?Sized> Finalize for PhantomData<T> {}
+unsafe impl<T: ?Sized> Trace for PhantomData<T> {
     unsafe_empty_trace!();
 }
 
