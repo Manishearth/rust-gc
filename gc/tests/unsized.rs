@@ -36,3 +36,14 @@ fn gc_box_slice() {
 fn gc_slice() {
     let _: Gc<[u32]> = Gc::new([0, 1, 2]);
 }
+
+#[test]
+fn gc_box_str() {
+    let _: Gc<Box<str>> = Gc::new(Box::from("hello"));
+}
+
+#[cfg(feature = "nightly")]
+#[allow(dead_code)]
+fn gc_str(_: Gc<str>) {
+    // no way to construct this yet
+}

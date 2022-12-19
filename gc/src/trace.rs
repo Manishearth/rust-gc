@@ -135,7 +135,7 @@ simple_empty_finalize_trace![
     f64,
     char,
     String,
-    Box<str>,
+    str,
     Rc<str>,
     Path,
     PathBuf,
