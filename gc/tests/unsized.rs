@@ -25,3 +25,14 @@ fn gc_dyn_foo() {
 fn gc_box_anyfoo(b: Box<AnyFoo>) -> Gc<Box<AnyFoo>> {
     Gc::new(b)
 }
+
+#[test]
+fn gc_box_slice() {
+    let _: Gc<Box<[u32]>> = Gc::new(Box::new([0, 1, 2]));
+}
+
+#[cfg(feature = "nightly")]
+#[test]
+fn gc_slice() {
+    let _: Gc<[u32]> = Gc::new([0, 1, 2]);
+}
