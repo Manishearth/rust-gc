@@ -46,11 +46,6 @@ struct InnerRcStr {
     inner: Rc<str>,
 }
 
-#[derive(Trace, Clone, Finalize)]
-struct InnerRcStruct {
-    inner: Rc<Bar>,
-}
-
 #[derive(Trace, Finalize)]
 struct Baz {
     a: Bar,
