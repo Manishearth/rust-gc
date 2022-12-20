@@ -80,9 +80,9 @@ impl<T: Trace> Gc<T> {
 
             // When we create a Gc<T>, all pointers which have been moved to the
             // heap no longer need to be rooted, so we unroot them.
-            (*ptr.as_ptr()).value().unroot();
+            ptr.as_ref().value().unroot();
             let gc = Gc {
-                ptr_root: Cell::new(NonNull::new_unchecked(ptr.as_ptr())),
+                ptr_root: Cell::new(ptr),
                 marker: PhantomData,
             };
             gc.set_root();

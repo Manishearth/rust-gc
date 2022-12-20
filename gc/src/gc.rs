@@ -198,11 +198,11 @@ fn collect_garbage(st: &mut GcState) {
         // Walk the tree, tracing and marking the nodes
         let mut mark_head = head.get();
         while let Some(node) = mark_head {
-            if (*node.as_ptr()).header.roots() > 0 {
-                (*node.as_ptr()).trace_inner();
+            if node.as_ref().header.roots() > 0 {
+                node.as_ref().trace_inner();
             }
 
-            mark_head = (*node.as_ptr()).header.next.get();
+            mark_head = node.as_ref().header.next.get();
         }
 
         // Collect a vector of all of the nodes which were not marked,
@@ -210,15 +210,15 @@ fn collect_garbage(st: &mut GcState) {
         let mut unmarked = Vec::new();
         let mut unmark_head = head;
         while let Some(node) = unmark_head.get() {
-            if (*node.as_ptr()).header.is_marked() {
-                (*node.as_ptr()).header.unmark();
+            if node.as_ref().header.is_marked() {
+                node.as_ref().header.unmark();
             } else {
                 unmarked.push(Unmarked {
                     incoming: unmark_head,
                     this: node,
                 });
             }
-            unmark_head = &(*node.as_ptr()).header.next;
+            unmark_head = &node.as_ref().header.next;
         }
         unmarked
     }
@@ -226,7 +226,7 @@ fn collect_garbage(st: &mut GcState) {
     unsafe fn sweep(finalized: Vec<Unmarked<'_>>, bytes_allocated: &mut usize) {
         let _guard = DropGuard::new();
         for node in finalized.into_iter().rev() {
-            if (*node.this.as_ptr()).header.is_marked() {
+            if node.this.as_ref().header.is_marked() {
                 continue;
             }
             let incoming = node.incoming;
@@ -245,7 +245,7 @@ fn collect_garbage(st: &mut GcState) {
             return;
         }
         for node in &unmarked {
-            Trace::finalize_glue(&(*node.this.as_ptr()).data);
+            Trace::finalize_glue(&node.this.as_ref().data);
         }
         mark(head);
         sweep(unmarked, &mut st.stats.bytes_allocated);
