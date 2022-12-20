@@ -30,7 +30,7 @@ pub unsafe trait Trace: Finalize {
     /// Decrements the root-count of all contained `Gc`s.
     unsafe fn unroot(&self);
 
-    /// Runs Finalize::finalize() on this object and all
+    /// Runs `Finalize::finalize()` on this object and all
     /// contained subobjects
     fn finalize_glue(&self);
 }

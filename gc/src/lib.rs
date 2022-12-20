@@ -387,13 +387,13 @@ impl<T: Trace + ?Sized> std::convert::AsRef<T> for Gc<T> {
 // GcCell //
 ////////////
 
-/// The BorrowFlag used by GC is split into 2 parts. the upper 63 or 31 bits
+/// The `BorrowFlag` used by GC is split into 2 parts. the upper 63 or 31 bits
 /// (depending on the architecture) are used to store the number of borrowed
 /// references to the type. The low bit is used to record the rootedness of the
 /// type.
 ///
-/// This means that GcCell can have, at maximum, half as many outstanding
-/// borrows as RefCell before panicking. I don't think that will be a problem.
+/// This means that `GcCell` can have, at maximum, half as many outstanding
+/// borrows as `RefCell` before panicking. I don't think that will be a problem.
 #[derive(Copy, Clone)]
 struct BorrowFlag(usize);
 
@@ -733,7 +733,7 @@ impl<'a, T: ?Sized> GcCellRef<'a, T> {
     ///
     /// The `GcCell` is already immutably borrowed, so this cannot fail.
     ///
-    /// This is an associated function that needs to be used as GcCellRef::map_split(...).
+    /// This is an associated function that needs to be used as `GcCellRef::map_split(...)`.
     /// A method would interfere with methods of the same name on the contents of a `GcCellRef` used through `Deref`.
     ///
     /// # Examples
