@@ -59,7 +59,7 @@ fn test() {
     X.with(|x| assert!(*x.borrow() == 1));
     let baz = Baz {
         a: bar.clone(),
-        b: bar.clone(),
+        b: bar,
     };
     unsafe {
         baz.trace();
