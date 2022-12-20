@@ -421,10 +421,7 @@ impl BorrowFlag {
     }
 
     fn rooted(self) -> bool {
-        match self.0 & ROOT {
-            0 => false,
-            _ => true,
-        }
+        self.0 & ROOT != 0
     }
 
     fn set_writing(self) -> Self {
