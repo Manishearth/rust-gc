@@ -1,10 +1,8 @@
-use gc_derive::{Finalize, Trace};
+use gc::{Finalize, Trace};
 use std::cell::RefCell;
 use std::rc::Rc;
 
 thread_local!(static X: RefCell<u8> = RefCell::new(0));
-
-use gc::Trace;
 
 #[derive(Copy, Clone, Finalize)]
 struct Foo;
