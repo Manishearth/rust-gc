@@ -190,8 +190,6 @@ impl<T: Trace + ?Sized> GcBox<T> {
 
 /// Collects garbage.
 fn collect_garbage(st: &mut GcState) {
-    st.stats.collections_performed += 1;
-
     struct Unmarked<'a> {
         incoming: &'a Cell<Option<NonNull<GcBox<dyn Trace>>>>,
         this: NonNull<GcBox<dyn Trace>>,
@@ -237,6 +235,8 @@ fn collect_garbage(st: &mut GcState) {
             incoming.set(node.header.next.take());
         }
     }
+
+    st.stats.collections_performed += 1;
 
     unsafe {
         let unmarked = mark(&st.boxes_start);
