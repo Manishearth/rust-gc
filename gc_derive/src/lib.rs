@@ -74,6 +74,7 @@ fn derive_trace(mut s: Structure<'_>) -> proc_macro2::TokenStream {
 
 decl_derive!([Finalize] => derive_finalize);
 
+#[allow(clippy::needless_pass_by_value)]
 fn derive_finalize(s: Structure<'_>) -> proc_macro2::TokenStream {
     s.unbound_impl(quote!(::gc::Finalize), quote!())
 }

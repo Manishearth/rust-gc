@@ -254,6 +254,7 @@ fn trait_gc() {
             10
         }
     }
+    #[allow(clippy::needless_pass_by_value)]
     fn use_trait_gc(x: Gc<dyn Foo>) {
         assert_eq!(x.f(), 10);
     }

@@ -34,14 +34,15 @@ impl Drop for DropGuard {
         GC_DROPPING.with(|dropping| dropping.set(false));
     }
 }
+#[must_use]
 pub fn finalizer_safe() -> bool {
     GC_DROPPING.with(|dropping| !dropping.get())
 }
 
 // The garbage collector's internal state.
 thread_local!(static GC_STATE: RefCell<GcState> = RefCell::new(GcState {
-    stats: Default::default(),
-    config: Default::default(),
+    stats: GcStats::default(),
+    config: GcConfig::default(),
     boxes_start: Cell::new(None),
 }));
 
@@ -83,7 +84,7 @@ impl GcBoxHeader {
 
     #[inline]
     pub fn dec_roots(&self) {
-        self.roots.set(self.roots.get() - 1) // no underflow check
+        self.roots.set(self.roots.get() - 1); // no underflow check
     }
 
     #[inline]
@@ -93,12 +94,12 @@ impl GcBoxHeader {
 
     #[inline]
     pub fn mark(&self) {
-        self.roots.set(self.roots.get() | MARK_MASK)
+        self.roots.set(self.roots.get() | MARK_MASK);
     }
 
     #[inline]
     pub fn unmark(&self) {
-        self.roots.set(self.roots.get() & !MARK_MASK)
+        self.roots.set(self.roots.get() & !MARK_MASK);
     }
 }
 
@@ -119,7 +120,7 @@ impl<T: Trace> GcBox<T> {
 
             // XXX We should probably be more clever about collecting
             if st.stats.bytes_allocated > st.config.threshold {
-                collect_garbage(&mut *st);
+                collect_garbage(&mut st);
 
                 if st.stats.bytes_allocated as f64
                     > st.config.threshold as f64 * st.config.used_space_ratio
@@ -128,7 +129,7 @@ impl<T: Trace> GcBox<T> {
                     // threshold for next time, to avoid thrashing the
                     // collector too much/behaving quadratically.
                     st.config.threshold =
-                        (st.stats.bytes_allocated as f64 / st.config.used_space_ratio) as usize
+                        (st.stats.bytes_allocated as f64 / st.config.used_space_ratio) as usize;
                 }
             }
 
@@ -190,8 +191,6 @@ impl<T: Trace + ?Sized> GcBox<T> {
 
 /// Collects garbage.
 fn collect_garbage(st: &mut GcState) {
-    st.stats.collections_performed += 1;
-
     struct Unmarked<'a> {
         incoming: &'a Cell<Option<NonNull<GcBox<dyn Trace>>>>,
         this: NonNull<GcBox<dyn Trace>>,
@@ -238,6 +237,8 @@ fn collect_garbage(st: &mut GcState) {
         }
     }
 
+    st.stats.collections_performed += 1;
+
     unsafe {
         let unmarked = mark(&st.boxes_start);
         if unmarked.is_empty() {
@@ -257,7 +258,7 @@ fn collect_garbage(st: &mut GcState) {
 pub fn force_collect() {
     GC_STATE.with(|st| {
         let mut st = st.borrow_mut();
-        collect_garbage(&mut *st);
+        collect_garbage(&mut st);
     });
 }
 
@@ -288,25 +289,17 @@ pub fn configure(configurer: impl FnOnce(&mut GcConfig)) {
     GC_STATE.with(|st| {
         let mut st = st.borrow_mut();
         configurer(&mut st.config);
-    })
+    });
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct GcStats {
     pub bytes_allocated: usize,
     pub collections_performed: usize,
 }
 
-impl Default for GcStats {
-    fn default() -> Self {
-        Self {
-            bytes_allocated: 0,
-            collections_performed: 0,
-        }
-    }
-}
-
 #[allow(dead_code)]
+#[must_use]
 pub fn stats() -> GcStats {
     GC_STATE.with(|st| st.borrow().stats.clone())
 }

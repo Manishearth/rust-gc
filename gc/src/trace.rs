@@ -30,7 +30,7 @@ pub unsafe trait Trace: Finalize {
     /// Decrements the root-count of all contained `Gc`s.
     unsafe fn unroot(&self);
 
-    /// Runs Finalize::finalize() on this object and all
+    /// Runs `Finalize::finalize()` on this object and all
     /// contained subobjects
     fn finalize_glue(&self);
 }
@@ -91,11 +91,11 @@ macro_rules! custom_trace {
         }
         #[inline]
         fn finalize_glue(&self) {
-            $crate::Finalize::finalize(self);
             #[inline]
             fn mark<T: $crate::Trace + ?Sized>(it: &T) {
                 $crate::Trace::finalize_glue(it);
             }
+            $crate::Finalize::finalize(self);
             let $this = self;
             $body
         }

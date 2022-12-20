@@ -15,6 +15,6 @@ impl<T: Serialize + Trace> Serialize for Gc<T> {
     where
         S: Serializer,
     {
-        T::serialize(&self, serializer)
+        T::serialize(self, serializer)
     }
 }
