@@ -119,7 +119,7 @@ impl<T: Trace> GcBox<T> {
 
             // XXX We should probably be more clever about collecting
             if st.stats.bytes_allocated > st.config.threshold {
-                collect_garbage(&mut *st);
+                collect_garbage(&mut st);
 
                 if st.stats.bytes_allocated as f64
                     > st.config.threshold as f64 * st.config.used_space_ratio
@@ -257,7 +257,7 @@ fn collect_garbage(st: &mut GcState) {
 pub fn force_collect() {
     GC_STATE.with(|st| {
         let mut st = st.borrow_mut();
-        collect_garbage(&mut *st);
+        collect_garbage(&mut st);
     });
 }
 

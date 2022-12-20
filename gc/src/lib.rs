@@ -373,13 +373,13 @@ impl<T: Trace> From<T> for Gc<T> {
 
 impl<T: Trace + ?Sized> std::borrow::Borrow<T> for Gc<T> {
     fn borrow(&self) -> &T {
-        &**self
+        self
     }
 }
 
 impl<T: Trace + ?Sized> std::convert::AsRef<T> for Gc<T> {
     fn as_ref(&self) -> &T {
-        &**self
+        self
     }
 }
 
