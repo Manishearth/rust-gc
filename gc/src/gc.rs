@@ -291,19 +291,10 @@ pub fn configure(configurer: impl FnOnce(&mut GcConfig)) {
     })
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct GcStats {
     pub bytes_allocated: usize,
     pub collections_performed: usize,
-}
-
-impl Default for GcStats {
-    fn default() -> Self {
-        Self {
-            bytes_allocated: 0,
-            collections_performed: 0,
-        }
-    }
 }
 
 #[allow(dead_code)]
