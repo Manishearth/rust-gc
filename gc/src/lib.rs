@@ -686,6 +686,7 @@ impl<'a, T: ?Sized> GcCellRef<'a, T> {
     /// `GcCellRef::clone(...)`. A `Clone` implementation or a method
     /// would interfere with the use of `c.borrow().clone()` to clone
     /// the contents of a `GcCell`.
+    #[allow(clippy::should_implement_trait)]
     #[inline]
     pub fn clone(orig: &GcCellRef<'a, T>) -> GcCellRef<'a, T> {
         orig.flags.set(orig.flags.get().add_reading());
