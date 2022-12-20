@@ -159,6 +159,7 @@ impl<T: Trace + ?Sized> Gc<T> {
     /// let x = Gc::new(22);
     /// let x_ptr = Gc::into_raw(x);
     /// assert_eq!(unsafe { *x_ptr }, 22);
+    /// unsafe { Gc::from_raw(x_ptr) };
     /// ```
     pub fn into_raw(this: Self) -> *const T {
         let ptr: *const T = GcBox::value_ptr(this.inner_ptr());
