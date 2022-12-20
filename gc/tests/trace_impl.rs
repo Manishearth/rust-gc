@@ -12,7 +12,7 @@ unsafe impl Trace for Foo {
         X.with(|x| {
             let mut m = x.borrow_mut();
             *m += 1;
-        })
+        });
     }
     unsafe fn root(&self) {}
     unsafe fn unroot(&self) {}

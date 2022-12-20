@@ -84,7 +84,7 @@ impl GcBoxHeader {
 
     #[inline]
     pub fn dec_roots(&self) {
-        self.roots.set(self.roots.get() - 1) // no underflow check
+        self.roots.set(self.roots.get() - 1); // no underflow check
     }
 
     #[inline]
@@ -94,12 +94,12 @@ impl GcBoxHeader {
 
     #[inline]
     pub fn mark(&self) {
-        self.roots.set(self.roots.get() | MARK_MASK)
+        self.roots.set(self.roots.get() | MARK_MASK);
     }
 
     #[inline]
     pub fn unmark(&self) {
-        self.roots.set(self.roots.get() & !MARK_MASK)
+        self.roots.set(self.roots.get() & !MARK_MASK);
     }
 }
 
@@ -129,7 +129,7 @@ impl<T: Trace> GcBox<T> {
                     // threshold for next time, to avoid thrashing the
                     // collector too much/behaving quadratically.
                     st.config.threshold =
-                        (st.stats.bytes_allocated as f64 / st.config.used_space_ratio) as usize
+                        (st.stats.bytes_allocated as f64 / st.config.used_space_ratio) as usize;
                 }
             }
 
@@ -289,7 +289,7 @@ pub fn configure(configurer: impl FnOnce(&mut GcConfig)) {
     GC_STATE.with(|st| {
         let mut st = st.borrow_mut();
         configurer(&mut st.config);
-    })
+    });
 }
 
 #[derive(Clone, Default)]
