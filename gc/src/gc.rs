@@ -40,8 +40,8 @@ pub fn finalizer_safe() -> bool {
 
 // The garbage collector's internal state.
 thread_local!(static GC_STATE: RefCell<GcState> = RefCell::new(GcState {
-    stats: Default::default(),
-    config: Default::default(),
+    stats: GcStats::default(),
+    config: GcConfig::default(),
     boxes_start: Cell::new(None),
 }));
 
