@@ -457,7 +457,7 @@ impl BorrowFlag {
 
     fn set_rooted(self, rooted: bool) -> Self {
         // Preserve the non-root bits
-        BorrowFlag((self.0 & !ROOT) | (rooted as usize))
+        BorrowFlag((self.0 & !ROOT) | usize::from(rooted))
     }
 }
 
