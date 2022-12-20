@@ -6,7 +6,7 @@ use std::ptr::{self, NonNull};
 struct GcState {
     stats: GcStats,
     config: GcConfig,
-    boxes_start: Cell<Option<NonNull<GcBox<dyn Trace>>>>,
+    boxes_start: Option<NonNull<GcBox<dyn Trace>>>,
 }
 
 impl Drop for GcState {
@@ -43,7 +43,7 @@ pub fn finalizer_safe() -> bool {
 thread_local!(static GC_STATE: RefCell<GcState> = RefCell::new(GcState {
     stats: GcStats::default(),
     config: GcConfig::default(),
-    boxes_start: Cell::new(None),
+    boxes_start: None,
 }));
 
 const MARK_MASK: usize = 1 << (usize::BITS - 1);
@@ -138,8 +138,7 @@ impl<T: Trace> GcBox<T> {
                 data: value,
             }));
 
-            st.boxes_start
-                .set(Some(unsafe { NonNull::new_unchecked(gcbox) }));
+            st.boxes_start = Some(unsafe { NonNull::new_unchecked(gcbox) });
 
             // We allocated some bytes! Let's record it
             st.stats.bytes_allocated += mem::size_of::<GcBox<T>>();
@@ -240,14 +239,15 @@ fn collect_garbage(st: &mut GcState) {
     st.stats.collections_performed += 1;
 
     unsafe {
-        let unmarked = mark(&st.boxes_start);
+        let head = Cell::from_mut(&mut st.boxes_start);
+        let unmarked = mark(head);
         if unmarked.is_empty() {
             return;
         }
         for node in &unmarked {
             Trace::finalize_glue(&(*node.this.as_ptr()).data);
         }
-        mark(&st.boxes_start);
+        mark(head);
         sweep(unmarked, &mut st.stats.bytes_allocated);
     }
 }
