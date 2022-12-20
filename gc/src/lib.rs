@@ -101,7 +101,7 @@ impl<T: Trace + ?Sized> Gc<T> {
 /// Returns the given pointer with its root bit cleared.
 unsafe fn clear_root_bit<T: ?Sized + Trace>(ptr: NonNull<GcBox<T>>) -> NonNull<GcBox<T>> {
     let ptr = ptr.as_ptr();
-    let data = ptr as *mut u8;
+    let data = ptr.cast::<u8>();
     let addr = data as isize;
     let ptr = set_data_ptr(ptr, data.wrapping_offset((addr & !1) - addr));
     NonNull::new_unchecked(ptr)
@@ -109,12 +109,12 @@ unsafe fn clear_root_bit<T: ?Sized + Trace>(ptr: NonNull<GcBox<T>>) -> NonNull<G
 
 impl<T: Trace + ?Sized> Gc<T> {
     fn rooted(&self) -> bool {
-        self.ptr_root.get().as_ptr() as *mut u8 as usize & 1 != 0
+        self.ptr_root.get().as_ptr().cast::<u8>() as usize & 1 != 0
     }
 
     unsafe fn set_root(&self) {
         let ptr = self.ptr_root.get().as_ptr();
-        let data = ptr as *mut u8;
+        let data = ptr.cast::<u8>();
         let addr = data as isize;
         let ptr = set_data_ptr(ptr, data.wrapping_offset((addr | 1) - addr));
         self.ptr_root.set(NonNull::new_unchecked(ptr));
@@ -981,6 +981,8 @@ impl<T: Trace + ?Sized + Debug> Debug for GcCell<T> {
 // For a slice/trait object, this sets the `data` field and leaves the rest
 // unchanged. For a sized raw pointer, this simply sets the pointer.
 unsafe fn set_data_ptr<T: ?Sized, U>(mut ptr: *mut T, data: *mut U) -> *mut T {
-    ptr::write(&mut ptr as *mut _ as *mut *mut u8, data as *mut u8);
+    ptr::addr_of_mut!(ptr)
+        .cast::<*mut u8>()
+        .write(data.cast::<u8>());
     ptr
 }
