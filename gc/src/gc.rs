@@ -34,6 +34,7 @@ impl Drop for DropGuard {
         GC_DROPPING.with(|dropping| dropping.set(false));
     }
 }
+#[must_use]
 pub fn finalizer_safe() -> bool {
     GC_DROPPING.with(|dropping| !dropping.get())
 }
@@ -298,6 +299,7 @@ pub struct GcStats {
 }
 
 #[allow(dead_code)]
+#[must_use]
 pub fn stats() -> GcStats {
     GC_STATE.with(|st| st.borrow().stats.clone())
 }

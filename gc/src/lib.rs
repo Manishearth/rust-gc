@@ -685,6 +685,7 @@ impl<'a, T: ?Sized> GcCellRef<'a, T> {
     /// the contents of a `GcCell`.
     #[allow(clippy::should_implement_trait)]
     #[inline]
+    #[must_use]
     pub fn clone(orig: &GcCellRef<'a, T>) -> GcCellRef<'a, T> {
         orig.flags.set(orig.flags.get().add_reading());
         GcCellRef {
