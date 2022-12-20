@@ -57,10 +57,10 @@ pub(crate) struct GcBoxHeader {
 
 impl GcBoxHeader {
     #[inline]
-    pub fn new(next: Option<NonNull<GcBox<dyn Trace>>>) -> Self {
+    pub fn new() -> Self {
         GcBoxHeader {
             roots: Cell::new(1), // unmarked and roots count = 1
-            next: Cell::new(next),
+            next: Cell::new(None),
         }
     }
 
@@ -111,42 +111,53 @@ pub(crate) struct GcBox<T: Trace + ?Sized + 'static> {
 
 impl<T: Trace> GcBox<T> {
     /// Allocates a garbage collected `GcBox` on the heap,
-    /// and appends it to the thread-local `GcBox` chain.
+    /// and appends it to the thread-local `GcBox` chain. This might
+    /// trigger a collection.
     ///
     /// A `GcBox` allocated this way starts its life rooted.
     pub(crate) fn new(value: T) -> NonNull<Self> {
-        GC_STATE.with(|st| {
-            let mut st = st.borrow_mut();
-
-            // XXX We should probably be more clever about collecting
-            if st.stats.bytes_allocated > st.config.threshold {
-                collect_garbage(&mut st);
-
-                if st.stats.bytes_allocated as f64
-                    > st.config.threshold as f64 * st.config.used_space_ratio
-                {
-                    // we didn't collect enough, so increase the
-                    // threshold for next time, to avoid thrashing the
-                    // collector too much/behaving quadratically.
-                    st.config.threshold =
-                        (st.stats.bytes_allocated as f64 / st.config.used_space_ratio) as usize;
-                }
-            }
-
-            let gcbox = Box::into_raw(Box::new(GcBox {
-                header: GcBoxHeader::new(st.boxes_start.take()),
-                data: value,
-            }));
-
-            st.boxes_start = Some(unsafe { NonNull::new_unchecked(gcbox) });
-
-            // We allocated some bytes! Let's record it
-            st.stats.bytes_allocated += mem::size_of::<GcBox<T>>();
-
-            // Return the pointer to the newly allocated data
-            unsafe { NonNull::new_unchecked(gcbox) }
-        })
+        let gcbox = NonNull::from(Box::leak(Box::new(GcBox {
+            header: GcBoxHeader::new(),
+            data: value,
+        })));
+        unsafe { insert_gcbox(gcbox) };
+        gcbox
     }
+}
+
+/// Add a new `GcBox` to the current thread's `GcBox` chain. This
+/// might trigger a collection first if enough bytes have been
+/// allocated since the previous collection.
+///
+/// # Safety
+///
+/// `gcbox` must point to a valid `GcBox` that is not yet in a `GcBox`
+/// chain.
+unsafe fn insert_gcbox(gcbox: NonNull<GcBox<dyn Trace>>) {
+    GC_STATE.with(|st| {
+        let mut st = st.borrow_mut();
+
+        // XXX We should probably be more clever about collecting
+        if st.stats.bytes_allocated > st.config.threshold {
+            collect_garbage(&mut st);
+
+            if st.stats.bytes_allocated as f64
+                > st.config.threshold as f64 * st.config.used_space_ratio
+            {
+                // we didn't collect enough, so increase the
+                // threshold for next time, to avoid thrashing the
+                // collector too much/behaving quadratically.
+                st.config.threshold =
+                    (st.stats.bytes_allocated as f64 / st.config.used_space_ratio) as usize;
+            }
+        }
+
+        let next = st.boxes_start.replace(gcbox);
+        gcbox.as_ref().header.next.set(next);
+
+        // We allocated some bytes! Let's record it
+        st.stats.bytes_allocated += mem::size_of_val::<GcBox<_>>(gcbox.as_ref());
+    });
 }
 
 impl<T: Trace + ?Sized> GcBox<T> {
