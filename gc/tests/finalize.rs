@@ -1,5 +1,4 @@
 use gc::{Finalize, Trace};
-use gc_derive::{Finalize, Trace};
 use std::cell::Cell;
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]

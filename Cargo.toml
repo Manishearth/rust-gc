@@ -3,3 +3,4 @@ members = [
     "gc",
     "gc_derive",
 ]
+resolver = "2"

@@ -1,5 +1,4 @@
-use gc::{Gc, Trace};
-use gc_derive::{Finalize, Trace};
+use gc::{Finalize, Gc, Trace};
 
 trait Foo: Trace {}
 

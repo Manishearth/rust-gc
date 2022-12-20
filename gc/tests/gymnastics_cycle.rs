@@ -1,5 +1,4 @@
-use gc::{force_collect, Gc, GcCell};
-use gc_derive::Trace;
+use gc::{force_collect, Gc, GcCell, Trace};
 use std::cell::Cell;
 
 thread_local!(static COUNTER: Cell<u8> = Cell::new(0u8));

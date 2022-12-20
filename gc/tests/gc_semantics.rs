@@ -1,5 +1,4 @@
 use gc::{force_collect, Finalize, Gc, GcCell, Trace};
-use gc_derive::{Finalize, Trace};
 use std::cell::Cell;
 use std::thread::LocalKey;
 
