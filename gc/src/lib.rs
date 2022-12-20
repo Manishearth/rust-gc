@@ -843,18 +843,19 @@ impl<'a, T: Trace + ?Sized, U: ?Sized> GcCellRefMut<'a, T, U> {
         V: ?Sized,
         F: FnOnce(&mut U) -> &mut V,
     {
-        let value = unsafe { &mut *(orig.value as *mut U) };
+        let gc_cell = orig.gc_cell;
 
-        let ret = GcCellRefMut {
-            gc_cell: orig.gc_cell,
+        // Use MaybeUninit to avoid calling the destructor of
+        // GcCellRefMut (which would update the borrow flags) and to
+        // avoid duplicating the mutable reference orig.value (which
+        // would be UB).
+        let orig = mem::MaybeUninit::new(orig);
+        let value = unsafe { ptr::addr_of!((*orig.as_ptr()).value).read() };
+
+        GcCellRefMut {
+            gc_cell,
             value: f(value),
-        };
-
-        // We have to tell the compiler not to call the destructor of GcCellRefMut,
-        // because it will update the borrow flags.
-        std::mem::forget(orig);
-
-        ret
+        }
     }
 }
 
