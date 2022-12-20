@@ -1,7 +1,12 @@
+use crate::set_data_ptr;
 use crate::trace::Trace;
+use std::alloc::{alloc, dealloc, Layout};
 use std::cell::{Cell, RefCell};
 use std::mem;
 use std::ptr::{self, NonNull};
+
+#[cfg(feature = "nightly")]
+use std::marker::Unsize;
 
 struct GcState {
     stats: GcStats,
@@ -103,7 +108,7 @@ impl GcBoxHeader {
     }
 }
 
-#[repr(C)] // to justify the layout computation in Gc::from_raw
+#[repr(C)] // to justify the layout computations in GcBox::from_box, Gc::from_raw
 pub(crate) struct GcBox<T: Trace + ?Sized + 'static> {
     header: GcBoxHeader,
     data: T,
@@ -122,6 +127,58 @@ impl<T: Trace> GcBox<T> {
         })));
         unsafe { insert_gcbox(gcbox) };
         gcbox
+    }
+}
+
+impl<
+        #[cfg(not(feature = "nightly"))] T: Trace,
+        #[cfg(feature = "nightly")] T: Trace + Unsize<dyn Trace> + ?Sized,
+    > GcBox<T>
+{
+    /// Consumes a `Box`, moving the value inside into a new `GcBox`
+    /// on the heap. Adds the new `GcBox` to the thread-local `GcBox`
+    /// chain. This might trigger a collection.
+    ///
+    /// A `GcBox` allocated this way starts its life rooted.
+    pub(crate) fn from_box(value: Box<T>) -> NonNull<Self> {
+        let header_layout = Layout::new::<GcBoxHeader>();
+        let value_layout = Layout::for_value::<T>(&*value);
+        // This relies on GcBox being #[repr(C)].
+        let gcbox_layout = header_layout.extend(value_layout).unwrap().0.pad_to_align();
+
+        unsafe {
+            // Allocate the GcBox in a way that's compatible with Box,
+            // since the collector will deallocate it via
+            // Box::from_raw.
+            let gcbox_addr = alloc(gcbox_layout);
+
+            // Since we're not allowed to move the value out of an
+            // active Box, and we will need to deallocate the Box
+            // without calling the destructor, convert it to a raw
+            // pointer first.
+            let value = Box::into_raw(value);
+
+            // Create a pointer with the metadata of value and the
+            // address and provenance of the GcBox.
+            let gcbox = set_data_ptr(value as *mut GcBox<T>, gcbox_addr);
+
+            // Move the data.
+            ptr::addr_of_mut!((*gcbox).header).write(GcBoxHeader::new());
+            ptr::addr_of_mut!((*gcbox).data)
+                .cast::<u8>()
+                .copy_from_nonoverlapping(value.cast::<u8>(), value_layout.size());
+
+            // Deallocate the former Box. (Box only allocates for size
+            // != 0.)
+            if value_layout.size() != 0 {
+                dealloc(value.cast::<u8>(), value_layout);
+            }
+
+            // Add the new GcBox to the chain and return it.
+            let gcbox = NonNull::new_unchecked(gcbox);
+            insert_gcbox(gcbox);
+            gcbox
+        }
     }
 }
 

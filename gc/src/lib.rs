@@ -379,6 +379,19 @@ impl<T: Trace> From<T> for Gc<T> {
     }
 }
 
+impl<
+        #[cfg(not(feature = "nightly"))] T: Trace,
+        #[cfg(feature = "nightly")] T: Trace + Unsize<dyn Trace> + ?Sized,
+    > From<Box<T>> for Gc<T>
+{
+    /// Moves a boxed value into a new garbage-collected
+    /// allocation. If the `nightly` crate feature is enabled, the
+    /// value may be an unsized trait object.
+    fn from(v: Box<T>) -> Gc<T> {
+        unsafe { Gc::from_gcbox(GcBox::from_box(v)) }
+    }
+}
+
 impl<T: Trace + ?Sized> std::borrow::Borrow<T> for Gc<T> {
     fn borrow(&self) -> &T {
         self
