@@ -1,12 +1,17 @@
+use crate::set_data_ptr;
 use crate::trace::Trace;
+use std::alloc::{alloc, dealloc, Layout};
 use std::cell::{Cell, RefCell};
 use std::mem;
 use std::ptr::{self, NonNull};
 
+#[cfg(feature = "nightly")]
+use std::marker::Unsize;
+
 struct GcState {
     stats: GcStats,
     config: GcConfig,
-    boxes_start: Cell<Option<NonNull<GcBox<dyn Trace>>>>,
+    boxes_start: Option<NonNull<GcBox<dyn Trace>>>,
 }
 
 impl Drop for GcState {
@@ -43,7 +48,7 @@ pub fn finalizer_safe() -> bool {
 thread_local!(static GC_STATE: RefCell<GcState> = RefCell::new(GcState {
     stats: GcStats::default(),
     config: GcConfig::default(),
-    boxes_start: Cell::new(None),
+    boxes_start: None,
 }));
 
 const MARK_MASK: usize = 1 << (usize::BITS - 1);
@@ -57,10 +62,10 @@ pub(crate) struct GcBoxHeader {
 
 impl GcBoxHeader {
     #[inline]
-    pub fn new(next: Option<NonNull<GcBox<dyn Trace>>>) -> Self {
+    pub fn new() -> Self {
         GcBoxHeader {
             roots: Cell::new(1), // unmarked and roots count = 1
-            next: Cell::new(next),
+            next: Cell::new(None),
         }
     }
 
@@ -103,7 +108,7 @@ impl GcBoxHeader {
     }
 }
 
-#[repr(C)] // to justify the layout computation in Gc::from_raw
+#[repr(C)] // to justify the layout computations in GcBox::from_box, Gc::from_raw
 pub(crate) struct GcBox<T: Trace + ?Sized + 'static> {
     header: GcBoxHeader,
     data: T,
@@ -111,43 +116,105 @@ pub(crate) struct GcBox<T: Trace + ?Sized + 'static> {
 
 impl<T: Trace> GcBox<T> {
     /// Allocates a garbage collected `GcBox` on the heap,
-    /// and appends it to the thread-local `GcBox` chain.
+    /// and appends it to the thread-local `GcBox` chain. This might
+    /// trigger a collection.
     ///
     /// A `GcBox` allocated this way starts its life rooted.
     pub(crate) fn new(value: T) -> NonNull<Self> {
-        GC_STATE.with(|st| {
-            let mut st = st.borrow_mut();
+        let gcbox = NonNull::from(Box::leak(Box::new(GcBox {
+            header: GcBoxHeader::new(),
+            data: value,
+        })));
+        unsafe { insert_gcbox(gcbox) };
+        gcbox
+    }
+}
 
-            // XXX We should probably be more clever about collecting
-            if st.stats.bytes_allocated > st.config.threshold {
-                collect_garbage(&mut st);
+impl<
+        #[cfg(not(feature = "nightly"))] T: Trace,
+        #[cfg(feature = "nightly")] T: Trace + Unsize<dyn Trace> + ?Sized,
+    > GcBox<T>
+{
+    /// Consumes a `Box`, moving the value inside into a new `GcBox`
+    /// on the heap. Adds the new `GcBox` to the thread-local `GcBox`
+    /// chain. This might trigger a collection.
+    ///
+    /// A `GcBox` allocated this way starts its life rooted.
+    pub(crate) fn from_box(value: Box<T>) -> NonNull<Self> {
+        let header_layout = Layout::new::<GcBoxHeader>();
+        let value_layout = Layout::for_value::<T>(&*value);
+        // This relies on GcBox being #[repr(C)].
+        let gcbox_layout = header_layout.extend(value_layout).unwrap().0.pad_to_align();
 
-                if st.stats.bytes_allocated as f64
-                    > st.config.threshold as f64 * st.config.used_space_ratio
-                {
-                    // we didn't collect enough, so increase the
-                    // threshold for next time, to avoid thrashing the
-                    // collector too much/behaving quadratically.
-                    st.config.threshold =
-                        (st.stats.bytes_allocated as f64 / st.config.used_space_ratio) as usize;
-                }
+        unsafe {
+            // Allocate the GcBox in a way that's compatible with Box,
+            // since the collector will deallocate it via
+            // Box::from_raw.
+            let gcbox_addr = alloc(gcbox_layout);
+
+            // Since we're not allowed to move the value out of an
+            // active Box, and we will need to deallocate the Box
+            // without calling the destructor, convert it to a raw
+            // pointer first.
+            let value = Box::into_raw(value);
+
+            // Create a pointer with the metadata of value and the
+            // address and provenance of the GcBox.
+            let gcbox = set_data_ptr(value as *mut GcBox<T>, gcbox_addr);
+
+            // Move the data.
+            ptr::addr_of_mut!((*gcbox).header).write(GcBoxHeader::new());
+            ptr::addr_of_mut!((*gcbox).data)
+                .cast::<u8>()
+                .copy_from_nonoverlapping(value.cast::<u8>(), value_layout.size());
+
+            // Deallocate the former Box. (Box only allocates for size
+            // != 0.)
+            if value_layout.size() != 0 {
+                dealloc(value.cast::<u8>(), value_layout);
             }
 
-            let gcbox = Box::into_raw(Box::new(GcBox {
-                header: GcBoxHeader::new(st.boxes_start.take()),
-                data: value,
-            }));
-
-            st.boxes_start
-                .set(Some(unsafe { NonNull::new_unchecked(gcbox) }));
-
-            // We allocated some bytes! Let's record it
-            st.stats.bytes_allocated += mem::size_of::<GcBox<T>>();
-
-            // Return the pointer to the newly allocated data
-            unsafe { NonNull::new_unchecked(gcbox) }
-        })
+            // Add the new GcBox to the chain and return it.
+            let gcbox = NonNull::new_unchecked(gcbox);
+            insert_gcbox(gcbox);
+            gcbox
+        }
     }
+}
+
+/// Add a new `GcBox` to the current thread's `GcBox` chain. This
+/// might trigger a collection first if enough bytes have been
+/// allocated since the previous collection.
+///
+/// # Safety
+///
+/// `gcbox` must point to a valid `GcBox` that is not yet in a `GcBox`
+/// chain.
+unsafe fn insert_gcbox(gcbox: NonNull<GcBox<dyn Trace>>) {
+    GC_STATE.with(|st| {
+        let mut st = st.borrow_mut();
+
+        // XXX We should probably be more clever about collecting
+        if st.stats.bytes_allocated > st.config.threshold {
+            collect_garbage(&mut st);
+
+            if st.stats.bytes_allocated as f64
+                > st.config.threshold as f64 * st.config.used_space_ratio
+            {
+                // we didn't collect enough, so increase the
+                // threshold for next time, to avoid thrashing the
+                // collector too much/behaving quadratically.
+                st.config.threshold =
+                    (st.stats.bytes_allocated as f64 / st.config.used_space_ratio) as usize;
+            }
+        }
+
+        let next = st.boxes_start.replace(gcbox);
+        gcbox.as_ref().header.next.set(next);
+
+        // We allocated some bytes! Let's record it
+        st.stats.bytes_allocated += mem::size_of_val::<GcBox<_>>(gcbox.as_ref());
+    });
 }
 
 impl<T: Trace + ?Sized> GcBox<T> {
@@ -199,11 +266,11 @@ fn collect_garbage(st: &mut GcState) {
         // Walk the tree, tracing and marking the nodes
         let mut mark_head = head.get();
         while let Some(node) = mark_head {
-            if (*node.as_ptr()).header.roots() > 0 {
-                (*node.as_ptr()).trace_inner();
+            if node.as_ref().header.roots() > 0 {
+                node.as_ref().trace_inner();
             }
 
-            mark_head = (*node.as_ptr()).header.next.get();
+            mark_head = node.as_ref().header.next.get();
         }
 
         // Collect a vector of all of the nodes which were not marked,
@@ -211,15 +278,15 @@ fn collect_garbage(st: &mut GcState) {
         let mut unmarked = Vec::new();
         let mut unmark_head = head;
         while let Some(node) = unmark_head.get() {
-            if (*node.as_ptr()).header.is_marked() {
-                (*node.as_ptr()).header.unmark();
+            if node.as_ref().header.is_marked() {
+                node.as_ref().header.unmark();
             } else {
                 unmarked.push(Unmarked {
                     incoming: unmark_head,
                     this: node,
                 });
             }
-            unmark_head = &(*node.as_ptr()).header.next;
+            unmark_head = &node.as_ref().header.next;
         }
         unmarked
     }
@@ -227,7 +294,7 @@ fn collect_garbage(st: &mut GcState) {
     unsafe fn sweep(finalized: Vec<Unmarked<'_>>, bytes_allocated: &mut usize) {
         let _guard = DropGuard::new();
         for node in finalized.into_iter().rev() {
-            if (*node.this.as_ptr()).header.is_marked() {
+            if node.this.as_ref().header.is_marked() {
                 continue;
             }
             let incoming = node.incoming;
@@ -240,14 +307,15 @@ fn collect_garbage(st: &mut GcState) {
     st.stats.collections_performed += 1;
 
     unsafe {
-        let unmarked = mark(&st.boxes_start);
+        let head = Cell::from_mut(&mut st.boxes_start);
+        let unmarked = mark(head);
         if unmarked.is_empty() {
             return;
         }
         for node in &unmarked {
-            Trace::finalize_glue(&(*node.this.as_ptr()).data);
+            Trace::finalize_glue(&node.this.as_ref().data);
         }
-        mark(&st.boxes_start);
+        mark(head);
         sweep(unmarked, &mut st.stats.bytes_allocated);
     }
 }

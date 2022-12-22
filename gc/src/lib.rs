@@ -72,22 +72,30 @@ impl<T: Trace> Gc<T> {
     /// assert_eq!(*five, 5);
     /// ```
     pub fn new(value: T) -> Self {
-        assert!(mem::align_of::<GcBox<T>>() > 1);
+        unsafe { Gc::from_gcbox(GcBox::new(value)) }
+    }
+}
 
-        unsafe {
-            // Allocate the memory for the object
-            let ptr = GcBox::new(value);
+impl<T: Trace + ?Sized> Gc<T> {
+    /// Constructs a `Gc` that points to a new `GcBox`.
+    ///
+    /// # Safety
+    ///
+    /// `ptr` must point to a valid `GcBox` on the thread-local
+    /// `GcBox` chain.
+    #[inline]
+    unsafe fn from_gcbox(ptr: NonNull<GcBox<T>>) -> Gc<T> {
+        assert!(mem::align_of_val::<GcBox<T>>(ptr.as_ref()) > 1);
 
-            // When we create a Gc<T>, all pointers which have been moved to the
-            // heap no longer need to be rooted, so we unroot them.
-            (*ptr.as_ptr()).value().unroot();
-            let gc = Gc {
-                ptr_root: Cell::new(NonNull::new_unchecked(ptr.as_ptr())),
-                marker: PhantomData,
-            };
-            gc.set_root();
-            gc
-        }
+        // When we create a Gc<T>, all pointers which have been moved to the
+        // heap no longer need to be rooted, so we unroot them.
+        ptr.as_ref().value().unroot();
+        let gc = Gc {
+            ptr_root: Cell::new(ptr),
+            marker: PhantomData,
+        };
+        gc.set_root();
+        gc
     }
 }
 
@@ -368,6 +376,19 @@ impl<T: Trace + ?Sized> fmt::Pointer for Gc<T> {
 impl<T: Trace> From<T> for Gc<T> {
     fn from(t: T) -> Self {
         Self::new(t)
+    }
+}
+
+impl<
+        #[cfg(not(feature = "nightly"))] T: Trace,
+        #[cfg(feature = "nightly")] T: Trace + Unsize<dyn Trace> + ?Sized,
+    > From<Box<T>> for Gc<T>
+{
+    /// Moves a boxed value into a new garbage-collected
+    /// allocation. If the `nightly` crate feature is enabled, the
+    /// value may be an unsized trait object.
+    fn from(v: Box<T>) -> Gc<T> {
+        unsafe { Gc::from_gcbox(GcBox::from_box(v)) }
     }
 }
 
