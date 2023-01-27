@@ -10,7 +10,7 @@ impl<'de, T: Deserialize<'de> + Trace> Deserialize<'de> for Gc<T> {
     }
 }
 
-impl<T: Serialize + Trace> Serialize for Gc<T> {
+impl<T: Serialize> Serialize for Gc<T> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,

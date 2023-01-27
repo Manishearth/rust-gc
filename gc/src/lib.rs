@@ -48,13 +48,13 @@ pub use crate::gc::{stats, GcStats};
 /// A garbage-collected pointer type over an immutable value.
 ///
 /// See the [module level documentation](./) for more details.
-pub struct Gc<T: Trace + ?Sized + 'static> {
+pub struct Gc<T: ?Sized + 'static> {
     ptr_root: Cell<NonNull<GcBox<T>>>,
     marker: PhantomData<Rc<T>>,
 }
 
 #[cfg(feature = "nightly")]
-impl<T: Trace + ?Sized + Unsize<U>, U: Trace + ?Sized> CoerceUnsized<Gc<U>> for Gc<T> {}
+impl<T: ?Sized + Unsize<U>, U: ?Sized> CoerceUnsized<Gc<U>> for Gc<T> {}
 
 impl<T: Trace> Gc<T> {
     /// Constructs a new `Gc<T>` with the given value.
@@ -99,7 +99,7 @@ impl<T: Trace + ?Sized> Gc<T> {
     }
 }
 
-impl<T: Trace + ?Sized> Gc<T> {
+impl<T: ?Sized> Gc<T> {
     /// Returns `true` if the two `Gc`s point to the same allocation.
     pub fn ptr_eq(this: &Gc<T>, other: &Gc<T>) -> bool {
         GcBox::ptr_eq(this.inner(), other.inner())
@@ -107,7 +107,7 @@ impl<T: Trace + ?Sized> Gc<T> {
 }
 
 /// Returns the given pointer with its root bit cleared.
-unsafe fn clear_root_bit<T: ?Sized + Trace>(ptr: NonNull<GcBox<T>>) -> NonNull<GcBox<T>> {
+unsafe fn clear_root_bit<T: ?Sized>(ptr: NonNull<GcBox<T>>) -> NonNull<GcBox<T>> {
     let ptr = ptr.as_ptr();
     let data = ptr.cast::<u8>();
     let addr = data as isize;
@@ -115,7 +115,7 @@ unsafe fn clear_root_bit<T: ?Sized + Trace>(ptr: NonNull<GcBox<T>>) -> NonNull<G
     NonNull::new_unchecked(ptr)
 }
 
-impl<T: Trace + ?Sized> Gc<T> {
+impl<T: ?Sized> Gc<T> {
     fn rooted(&self) -> bool {
         self.ptr_root.get().as_ptr().cast::<u8>() as usize & 1 != 0
     }
@@ -151,7 +151,7 @@ impl<T: Trace + ?Sized> Gc<T> {
     }
 }
 
-impl<T: Trace + ?Sized> Gc<T> {
+impl<T: ?Sized> Gc<T> {
     /// Consumes the `Gc`, returning the wrapped pointer.
     ///
     /// To avoid a memory leak, the pointer must be converted back into a `Gc`
@@ -225,7 +225,7 @@ impl<T: Trace + ?Sized> Gc<T> {
     }
 }
 
-impl<T: Trace + ?Sized> Finalize for Gc<T> {}
+impl<T: ?Sized> Finalize for Gc<T> {}
 
 unsafe impl<T: Trace + ?Sized> Trace for Gc<T> {
     #[inline]
@@ -263,7 +263,7 @@ unsafe impl<T: Trace + ?Sized> Trace for Gc<T> {
     }
 }
 
-impl<T: Trace + ?Sized> Clone for Gc<T> {
+impl<T: ?Sized> Clone for Gc<T> {
     #[inline]
     fn clone(&self) -> Self {
         unsafe {
@@ -278,7 +278,7 @@ impl<T: Trace + ?Sized> Clone for Gc<T> {
     }
 }
 
-impl<T: Trace + ?Sized> Deref for Gc<T> {
+impl<T: ?Sized> Deref for Gc<T> {
     type Target = T;
 
     #[inline]
@@ -287,7 +287,7 @@ impl<T: Trace + ?Sized> Deref for Gc<T> {
     }
 }
 
-impl<T: Trace + ?Sized> Drop for Gc<T> {
+impl<T: ?Sized> Drop for Gc<T> {
     #[inline]
     fn drop(&mut self) {
         // If this pointer was a root, we should unroot it.
@@ -306,16 +306,16 @@ impl<T: Trace + Default> Default for Gc<T> {
     }
 }
 
-impl<T: Trace + ?Sized + PartialEq> PartialEq for Gc<T> {
+impl<T: ?Sized + PartialEq> PartialEq for Gc<T> {
     #[inline(always)]
     fn eq(&self, other: &Self) -> bool {
         **self == **other
     }
 }
 
-impl<T: Trace + ?Sized + Eq> Eq for Gc<T> {}
+impl<T: ?Sized + Eq> Eq for Gc<T> {}
 
-impl<T: Trace + ?Sized + PartialOrd> PartialOrd for Gc<T> {
+impl<T: ?Sized + PartialOrd> PartialOrd for Gc<T> {
     #[inline(always)]
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         (**self).partial_cmp(&**other)
@@ -342,32 +342,32 @@ impl<T: Trace + ?Sized + PartialOrd> PartialOrd for Gc<T> {
     }
 }
 
-impl<T: Trace + ?Sized + Ord> Ord for Gc<T> {
+impl<T: ?Sized + Ord> Ord for Gc<T> {
     #[inline]
     fn cmp(&self, other: &Self) -> Ordering {
         (**self).cmp(&**other)
     }
 }
 
-impl<T: Trace + ?Sized + Hash> Hash for Gc<T> {
+impl<T: ?Sized + Hash> Hash for Gc<T> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         (**self).hash(state);
     }
 }
 
-impl<T: Trace + ?Sized + Display> Display for Gc<T> {
+impl<T: ?Sized + Display> Display for Gc<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         Display::fmt(&**self, f)
     }
 }
 
-impl<T: Trace + ?Sized + Debug> Debug for Gc<T> {
+impl<T: ?Sized + Debug> Debug for Gc<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         Debug::fmt(&**self, f)
     }
 }
 
-impl<T: Trace + ?Sized> fmt::Pointer for Gc<T> {
+impl<T: ?Sized> fmt::Pointer for Gc<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Pointer::fmt(&self.inner(), f)
     }
@@ -392,13 +392,13 @@ impl<
     }
 }
 
-impl<T: Trace + ?Sized> std::borrow::Borrow<T> for Gc<T> {
+impl<T: ?Sized> std::borrow::Borrow<T> for Gc<T> {
     fn borrow(&self) -> &T {
         self
     }
 }
 
-impl<T: Trace + ?Sized> std::convert::AsRef<T> for Gc<T> {
+impl<T: ?Sized> std::convert::AsRef<T> for Gc<T> {
     fn as_ref(&self) -> &T {
         self
     }
@@ -491,7 +491,7 @@ pub struct GcCell<T: ?Sized + 'static> {
     cell: UnsafeCell<T>,
 }
 
-impl<T: Trace> GcCell<T> {
+impl<T> GcCell<T> {
     /// Creates a new `GcCell` containing `value`.
     #[inline]
     pub fn new(value: T) -> Self {
@@ -508,7 +508,7 @@ impl<T: Trace> GcCell<T> {
     }
 }
 
-impl<T: Trace + ?Sized> GcCell<T> {
+impl<T: ?Sized> GcCell<T> {
     /// Immutably borrows the wrapped value.
     ///
     /// The borrow lasts until the returned `GcCellRef` exits scope.
@@ -524,7 +524,9 @@ impl<T: Trace + ?Sized> GcCell<T> {
             Err(e) => panic!("{}", e),
         }
     }
+}
 
+impl<T: Trace + ?Sized> GcCell<T> {
     /// Mutably borrows the wrapped value.
     ///
     /// The borrow lasts until the returned `GcCellRefMut` exits scope.
@@ -540,7 +542,9 @@ impl<T: Trace + ?Sized> GcCell<T> {
             Err(e) => panic!("{}", e),
         }
     }
+}
 
+impl<T: ?Sized> GcCell<T> {
     /// Immutably borrows the wrapped value, returning an error if the value is currently mutably
     /// borrowed.
     ///
@@ -583,7 +587,9 @@ impl<T: Trace + ?Sized> GcCell<T> {
             })
         }
     }
+}
 
+impl<T: Trace + ?Sized> GcCell<T> {
     /// Mutably borrows the wrapped value, returning an error if the value is currently borrowed.
     ///
     /// The borrow lasts until the returned `GcCellRefMut` exits scope.
@@ -646,7 +652,7 @@ impl std::fmt::Display for BorrowMutError {
     }
 }
 
-impl<T: Trace + ?Sized> Finalize for GcCell<T> {}
+impl<T: ?Sized> Finalize for GcCell<T> {}
 
 unsafe impl<T: Trace + ?Sized> Trace for GcCell<T> {
     #[inline]
@@ -926,30 +932,30 @@ impl<'a, T: Trace + ?Sized, U: Display + ?Sized> Display for GcCellRefMut<'a, T,
 
 unsafe impl<T: ?Sized + Send> Send for GcCell<T> {}
 
-impl<T: Trace + Clone> Clone for GcCell<T> {
+impl<T: Clone> Clone for GcCell<T> {
     #[inline]
     fn clone(&self) -> Self {
         Self::new(self.borrow().clone())
     }
 }
 
-impl<T: Trace + Default> Default for GcCell<T> {
+impl<T: Default> Default for GcCell<T> {
     #[inline]
     fn default() -> Self {
         Self::new(Default::default())
     }
 }
 
-impl<T: Trace + ?Sized + PartialEq> PartialEq for GcCell<T> {
+impl<T: ?Sized + PartialEq> PartialEq for GcCell<T> {
     #[inline(always)]
     fn eq(&self, other: &Self) -> bool {
         *self.borrow() == *other.borrow()
     }
 }
 
-impl<T: Trace + ?Sized + Eq> Eq for GcCell<T> {}
+impl<T: ?Sized + Eq> Eq for GcCell<T> {}
 
-impl<T: Trace + ?Sized + PartialOrd> PartialOrd for GcCell<T> {
+impl<T: ?Sized + PartialOrd> PartialOrd for GcCell<T> {
     #[inline(always)]
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         (*self.borrow()).partial_cmp(&*other.borrow())
@@ -976,14 +982,14 @@ impl<T: Trace + ?Sized + PartialOrd> PartialOrd for GcCell<T> {
     }
 }
 
-impl<T: Trace + ?Sized + Ord> Ord for GcCell<T> {
+impl<T: ?Sized + Ord> Ord for GcCell<T> {
     #[inline]
     fn cmp(&self, other: &GcCell<T>) -> Ordering {
         (*self.borrow()).cmp(&*other.borrow())
     }
 }
 
-impl<T: Trace + ?Sized + Debug> Debug for GcCell<T> {
+impl<T: ?Sized + Debug> Debug for GcCell<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.flags.get().borrowed() {
             BorrowState::Unused | BorrowState::Reading => f
