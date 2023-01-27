@@ -109,7 +109,7 @@ impl GcBoxHeader {
 }
 
 #[repr(C)] // to justify the layout computations in GcBox::from_box, Gc::from_raw
-pub(crate) struct GcBox<T: Trace + ?Sized + 'static> {
+pub(crate) struct GcBox<T: ?Sized + 'static> {
     header: GcBoxHeader,
     data: T,
 }
@@ -217,14 +217,16 @@ unsafe fn insert_gcbox(gcbox: NonNull<GcBox<dyn Trace>>) {
     });
 }
 
-impl<T: Trace + ?Sized> GcBox<T> {
+impl<T: ?Sized> GcBox<T> {
     /// Returns `true` if the two references refer to the same `GcBox`.
     pub(crate) fn ptr_eq(this: &GcBox<T>, other: &GcBox<T>) -> bool {
         // Use .header to ignore fat pointer vtables, to work around
         // https://github.com/rust-lang/rust/issues/46139
         ptr::eq(&this.header, &other.header)
     }
+}
 
+impl<T: Trace + ?Sized> GcBox<T> {
     /// Marks this `GcBox` and marks through its data.
     pub(crate) unsafe fn trace_inner(&self) {
         if !self.header.is_marked() {
@@ -232,7 +234,9 @@ impl<T: Trace + ?Sized> GcBox<T> {
             self.data.trace();
         }
     }
+}
 
+impl<T: ?Sized> GcBox<T> {
     /// Increases the root count on this `GcBox`.
     /// Roots prevent the `GcBox` from being destroyed by the garbage collector.
     pub(crate) unsafe fn root_inner(&self) {
