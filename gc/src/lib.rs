@@ -4,7 +4,10 @@
 //! It is marked as non-sendable because the garbage collection only occurs
 //! thread-locally.
 
-#![cfg_attr(feature = "nightly", feature(coerce_unsized, unsize))]
+#![cfg_attr(
+    feature = "nightly",
+    feature(coerce_unsized, dispatch_from_dyn, unsize)
+)]
 
 use crate::gc::{GcBox, GcBoxHeader};
 use std::alloc::Layout;
@@ -21,7 +24,7 @@ use std::rc::Rc;
 #[cfg(feature = "nightly")]
 use std::marker::Unsize;
 #[cfg(feature = "nightly")]
-use std::ops::CoerceUnsized;
+use std::ops::{CoerceUnsized, DispatchFromDyn};
 
 mod gc;
 #[cfg(feature = "serde")]
@@ -55,6 +58,9 @@ pub struct Gc<T: ?Sized + 'static> {
 
 #[cfg(feature = "nightly")]
 impl<T: ?Sized + Unsize<U>, U: ?Sized> CoerceUnsized<Gc<U>> for Gc<T> {}
+
+#[cfg(feature = "nightly")]
+impl<T: ?Sized + Unsize<U>, U: ?Sized> DispatchFromDyn<Gc<U>> for Gc<T> {}
 
 impl<T: Trace> Gc<T> {
     /// Constructs a new `Gc<T>` with the given value.
