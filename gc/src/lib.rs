@@ -141,12 +141,12 @@ impl<T: ?Sized> Gc<T> {
     #[inline]
     fn inner_ptr(&self) -> *mut GcBox<T> {
         // If we are currently in the dropping phase of garbage collection,
-        // it would be undefined behavior to dereference this pointer.
+        // it would be undefined behavior to dereference an unrooted Gc.
         // By opting into `Trace` you agree to not dereference this pointer
         // within your drop method, meaning that it should be safe.
         //
         // This assert exists just in case.
-        assert!(finalizer_safe());
+        assert!(finalizer_safe() || self.rooted());
 
         unsafe { clear_root_bit(self.ptr_root.get()).as_ptr() }
     }
