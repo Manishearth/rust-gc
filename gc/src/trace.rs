@@ -172,7 +172,13 @@ simple_empty_finalize_trace![
     RandomState
 ];
 
-impl<T: Trace, const N: usize> Finalize for [T; N] {}
+impl<T: Finalize, const N: usize> Finalize for [T; N] {
+    fn finalize(&self) {
+        for v in self {
+            v.finalize();
+        }
+    }
+}
 unsafe impl<T: Trace, const N: usize> Trace for [T; N] {
     custom_trace!(this, {
         for v in this {
@@ -207,14 +213,18 @@ macro_rules! fn_finalize_trace_group {
 macro_rules! tuple_finalize_trace {
     () => {}; // This case is handled above, by simple_finalize_empty_trace!().
     ($($args:ident),*) => {
-        impl<$($args),*> Finalize for ($($args,)*) {}
+        impl<$($args: $crate::Finalize),*> Finalize for ($($args,)*) {
+            fn finalize(&self) {
+                #[allow(non_snake_case)]
+                let &($(ref $args,)*) = self;
+                $(($args).finalize();)*
+            }
+        }
         unsafe impl<$($args: $crate::Trace),*> Trace for ($($args,)*) {
             custom_trace!(this, {
-                #[allow(non_snake_case, unused_unsafe)]
-                fn avoid_lints<$($args: $crate::Trace),*>(&($(ref $args,)*): &($($args,)*)) {
-                    unsafe { $(mark($args);)* }
-                }
-                avoid_lints(this)
+                #[allow(non_snake_case)]
+                let &($(ref $args,)*) = this;
+                $(mark($args);)*
             });
         }
     }
@@ -245,14 +255,24 @@ type_arg_tuple_based_finalize_trace_impls![
     (A, B, C, D, E, F, G, H, I, J, K, L);
 ];
 
-impl<T: Trace + ?Sized> Finalize for Box<T> {}
+impl<T: Finalize + ?Sized> Finalize for Box<T> {
+    fn finalize(&self) {
+        (**self).finalize();
+    }
+}
 unsafe impl<T: Trace + ?Sized> Trace for Box<T> {
     custom_trace!(this, {
         mark(&**this);
     });
 }
 
-impl<T: Trace> Finalize for [T] {}
+impl<T: Finalize> Finalize for [T] {
+    fn finalize(&self) {
+        for e in self {
+            e.finalize();
+        }
+    }
+}
 unsafe impl<T: Trace> Trace for [T] {
     custom_trace!(this, {
         for e in this {
@@ -261,7 +281,13 @@ unsafe impl<T: Trace> Trace for [T] {
     });
 }
 
-impl<T: Trace> Finalize for Vec<T> {}
+impl<T: Finalize> Finalize for Vec<T> {
+    fn finalize(&self) {
+        for e in self {
+            e.finalize();
+        }
+    }
+}
 unsafe impl<T: Trace> Trace for Vec<T> {
     custom_trace!(this, {
         for e in this {
@@ -270,35 +296,61 @@ unsafe impl<T: Trace> Trace for Vec<T> {
     });
 }
 
-impl<T: Trace> Finalize for Option<T> {}
+impl<T: Finalize> Finalize for Option<T> {
+    fn finalize(&self) {
+        if let Some(v) = self {
+            v.finalize();
+        }
+    }
+}
 unsafe impl<T: Trace> Trace for Option<T> {
     custom_trace!(this, {
-        if let Some(ref v) = *this {
+        if let Some(v) = this {
             mark(v);
         }
     });
 }
 
-impl<T: Trace, E: Trace> Finalize for Result<T, E> {}
+impl<T: Finalize, E: Finalize> Finalize for Result<T, E> {
+    fn finalize(&self) {
+        match self {
+            Ok(v) => v.finalize(),
+            Err(v) => v.finalize(),
+        }
+    }
+}
 unsafe impl<T: Trace, E: Trace> Trace for Result<T, E> {
     custom_trace!(this, {
-        match *this {
-            Ok(ref v) => mark(v),
-            Err(ref v) => mark(v),
+        match this {
+            Ok(v) => mark(v),
+            Err(v) => mark(v),
         }
     });
 }
 
-impl<T: Trace> Finalize for BinaryHeap<T> {}
+impl<T: Finalize> Finalize for BinaryHeap<T> {
+    fn finalize(&self) {
+        for v in self {
+            v.finalize();
+        }
+    }
+}
 unsafe impl<T: Trace> Trace for BinaryHeap<T> {
     custom_trace!(this, {
-        for v in this.iter() {
+        for v in this {
             mark(v);
         }
     });
 }
 
-impl<K: Trace, V: Trace> Finalize for BTreeMap<K, V> {}
+impl<K: Finalize, V: Finalize> Finalize for BTreeMap<K, V> {
+    fn finalize(&self) {
+        for (k, v) in self {
+            k.finalize();
+            v.finalize();
+        }
+    }
+}
 unsafe impl<K: Trace, V: Trace> Trace for BTreeMap<K, V> {
     custom_trace!(this, {
         for (k, v) in this {
@@ -308,7 +360,13 @@ unsafe impl<K: Trace, V: Trace> Trace for BTreeMap<K, V> {
     });
 }
 
-impl<T: Trace> Finalize for BTreeSet<T> {}
+impl<T: Finalize> Finalize for BTreeSet<T> {
+    fn finalize(&self) {
+        for v in self {
+            v.finalize();
+        }
+    }
+}
 unsafe impl<T: Trace> Trace for BTreeSet<T> {
     custom_trace!(this, {
         for v in this {
@@ -317,28 +375,49 @@ unsafe impl<T: Trace> Trace for BTreeSet<T> {
     });
 }
 
-impl<K: Trace, V: Trace, S> Finalize for HashMap<K, V, S> {}
+impl<K: Finalize, V: Finalize, S: Finalize> Finalize for HashMap<K, V, S> {
+    fn finalize(&self) {
+        self.hasher().finalize();
+        for (k, v) in self {
+            k.finalize();
+            v.finalize();
+        }
+    }
+}
 unsafe impl<K: Trace, V: Trace, S: Trace> Trace for HashMap<K, V, S> {
     custom_trace!(this, {
         mark(this.hasher());
-        for (k, v) in this.iter() {
+        for (k, v) in this {
             mark(k);
             mark(v);
         }
     });
 }
 
-impl<T: Trace, S> Finalize for HashSet<T, S> {}
+impl<T: Finalize, S: Finalize> Finalize for HashSet<T, S> {
+    fn finalize(&self) {
+        self.hasher().finalize();
+        for v in self {
+            v.finalize();
+        }
+    }
+}
 unsafe impl<T: Trace, S: Trace> Trace for HashSet<T, S> {
     custom_trace!(this, {
         mark(this.hasher());
-        for v in this.iter() {
+        for v in this {
             mark(v);
         }
     });
 }
 
-impl<T: Trace> Finalize for LinkedList<T> {}
+impl<T: Finalize> Finalize for LinkedList<T> {
+    fn finalize(&self) {
+        for v in self {
+            v.finalize();
+        }
+    }
+}
 unsafe impl<T: Trace> Trace for LinkedList<T> {
     custom_trace!(this, {
         for v in this.iter() {
@@ -352,16 +431,31 @@ unsafe impl<T: ?Sized> Trace for PhantomData<T> {
     unsafe_empty_trace!();
 }
 
-impl<T: Trace> Finalize for VecDeque<T> {}
+impl<T: Finalize> Finalize for VecDeque<T> {
+    fn finalize(&self) {
+        for v in self {
+            v.finalize();
+        }
+    }
+}
 unsafe impl<T: Trace> Trace for VecDeque<T> {
     custom_trace!(this, {
-        for v in this.iter() {
+        for v in this {
             mark(v);
         }
     });
 }
 
-impl<'a, T: ToOwned + ?Sized> Finalize for Cow<'a, T> {}
+impl<'a, T: ToOwned + ?Sized> Finalize for Cow<'a, T>
+where
+    T::Owned: Finalize,
+{
+    fn finalize(&self) {
+        if let Cow::Owned(ref v) = self {
+            v.finalize();
+        }
+    }
+}
 unsafe impl<'a, T: ToOwned + ?Sized> Trace for Cow<'a, T>
 where
     T::Owned: Trace,
