@@ -1,9 +1,9 @@
 use std::borrow::{Cow, ToOwned};
 use std::collections::hash_map::{DefaultHasher, RandomState};
 use std::collections::{BTreeMap, BTreeSet, BinaryHeap, HashMap, HashSet, LinkedList, VecDeque};
+use std::hash::BuildHasherDefault;
 #[allow(deprecated)]
 use std::hash::SipHasher;
-use std::hash::{BuildHasher, BuildHasherDefault, Hash};
 use std::marker::PhantomData;
 use std::num::{
     NonZeroI128, NonZeroI16, NonZeroI32, NonZeroI64, NonZeroI8, NonZeroIsize, NonZeroU128,
@@ -289,8 +289,8 @@ unsafe impl<T: Trace, E: Trace> Trace for Result<T, E> {
     });
 }
 
-impl<T: Ord + Trace> Finalize for BinaryHeap<T> {}
-unsafe impl<T: Ord + Trace> Trace for BinaryHeap<T> {
+impl<T: Trace> Finalize for BinaryHeap<T> {}
+unsafe impl<T: Trace> Trace for BinaryHeap<T> {
     custom_trace!(this, {
         for v in this.iter() {
             mark(v);
@@ -317,8 +317,8 @@ unsafe impl<T: Trace> Trace for BTreeSet<T> {
     });
 }
 
-impl<K: Eq + Hash + Trace, V: Trace, S: BuildHasher> Finalize for HashMap<K, V, S> {}
-unsafe impl<K: Eq + Hash + Trace, V: Trace, S: BuildHasher + Trace> Trace for HashMap<K, V, S> {
+impl<K: Trace, V: Trace, S> Finalize for HashMap<K, V, S> {}
+unsafe impl<K: Trace, V: Trace, S: Trace> Trace for HashMap<K, V, S> {
     custom_trace!(this, {
         mark(this.hasher());
         for (k, v) in this.iter() {
@@ -328,8 +328,8 @@ unsafe impl<K: Eq + Hash + Trace, V: Trace, S: BuildHasher + Trace> Trace for Ha
     });
 }
 
-impl<T: Eq + Hash + Trace, S: BuildHasher> Finalize for HashSet<T, S> {}
-unsafe impl<T: Eq + Hash + Trace, S: BuildHasher + Trace> Trace for HashSet<T, S> {
+impl<T: Trace, S> Finalize for HashSet<T, S> {}
+unsafe impl<T: Trace, S: Trace> Trace for HashSet<T, S> {
     custom_trace!(this, {
         mark(this.hasher());
         for v in this.iter() {
@@ -338,8 +338,8 @@ unsafe impl<T: Eq + Hash + Trace, S: BuildHasher + Trace> Trace for HashSet<T, S
     });
 }
 
-impl<T: Eq + Hash + Trace> Finalize for LinkedList<T> {}
-unsafe impl<T: Eq + Hash + Trace> Trace for LinkedList<T> {
+impl<T: Trace> Finalize for LinkedList<T> {}
+unsafe impl<T: Trace> Trace for LinkedList<T> {
     custom_trace!(this, {
         for v in this.iter() {
             mark(v);
@@ -361,8 +361,8 @@ unsafe impl<T: Trace> Trace for VecDeque<T> {
     });
 }
 
-impl<'a, T: ToOwned + Trace + ?Sized> Finalize for Cow<'a, T> {}
-unsafe impl<'a, T: ToOwned + Trace + ?Sized> Trace for Cow<'a, T>
+impl<'a, T: ToOwned + ?Sized> Finalize for Cow<'a, T> {}
+unsafe impl<'a, T: ToOwned + ?Sized> Trace for Cow<'a, T>
 where
     T::Owned: Trace,
 {
