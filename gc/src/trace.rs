@@ -1,6 +1,9 @@
 use std::borrow::{Cow, ToOwned};
+use std::collections::hash_map::{DefaultHasher, RandomState};
 use std::collections::{BTreeMap, BTreeSet, BinaryHeap, HashMap, HashSet, LinkedList, VecDeque};
-use std::hash::{BuildHasher, Hash};
+#[allow(deprecated)]
+use std::hash::SipHasher;
+use std::hash::{BuildHasher, BuildHasherDefault, Hash};
 use std::marker::PhantomData;
 use std::num::{
     NonZeroI128, NonZeroI16, NonZeroI32, NonZeroI64, NonZeroI8, NonZeroIsize, NonZeroU128,
@@ -110,7 +113,9 @@ unsafe impl<T: ?Sized> Trace for &'static T {
 macro_rules! simple_empty_finalize_trace {
     ($($T:ty),*) => {
         $(
+            #[allow(deprecated)]
             impl Finalize for $T {}
+            #[allow(deprecated)]
             unsafe impl Trace for $T { unsafe_empty_trace!(); }
         )*
     }
@@ -161,7 +166,10 @@ simple_empty_finalize_trace![
     AtomicI32,
     AtomicU32,
     AtomicI64,
-    AtomicU64
+    AtomicU64,
+    DefaultHasher,
+    SipHasher,
+    RandomState
 ];
 
 impl<T: Trace, const N: usize> Finalize for [T; N] {}
@@ -310,8 +318,9 @@ unsafe impl<T: Trace> Trace for BTreeSet<T> {
 }
 
 impl<K: Eq + Hash + Trace, V: Trace, S: BuildHasher> Finalize for HashMap<K, V, S> {}
-unsafe impl<K: Eq + Hash + Trace, V: Trace, S: BuildHasher> Trace for HashMap<K, V, S> {
+unsafe impl<K: Eq + Hash + Trace, V: Trace, S: BuildHasher + Trace> Trace for HashMap<K, V, S> {
     custom_trace!(this, {
+        mark(this.hasher());
         for (k, v) in this.iter() {
             mark(k);
             mark(v);
@@ -320,8 +329,9 @@ unsafe impl<K: Eq + Hash + Trace, V: Trace, S: BuildHasher> Trace for HashMap<K,
 }
 
 impl<T: Eq + Hash + Trace, S: BuildHasher> Finalize for HashSet<T, S> {}
-unsafe impl<T: Eq + Hash + Trace, S: BuildHasher> Trace for HashSet<T, S> {
+unsafe impl<T: Eq + Hash + Trace, S: BuildHasher + Trace> Trace for HashSet<T, S> {
     custom_trace!(this, {
+        mark(this.hasher());
         for v in this.iter() {
             mark(v);
         }
@@ -361,4 +371,9 @@ where
             mark(v);
         }
     });
+}
+
+impl<T> Finalize for BuildHasherDefault<T> {}
+unsafe impl<T> Trace for BuildHasherDefault<T> {
+    unsafe_empty_trace!();
 }
