@@ -1,6 +1,6 @@
 [package]
 name = "gc"
-version = "0.4.1"
+version = "0.5.0"
 authors = ["Manish Goregaokar <manishsmail@gmail.com>", "Nika Layzell <nika@thelayzells.com>"]
 description = "Tracing garbage collector plugin for Rust."
 repository = "https://github.com/Manishearth/rust-gc"
@@ -16,7 +16,7 @@ unstable-config = []
 unstable-stats = []
 
 [dependencies]
-gc_derive = { path = "../gc_derive", version = "0.4.1", optional = true }
+gc_derive = { path = "../gc_derive", version = "0.5.0", optional = true }
 serde = { version = "1.0.0", optional = true }
 
 [dev-dependencies]
