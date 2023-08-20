@@ -524,6 +524,7 @@ impl<T: ?Sized> GcCell<T> {
     ///
     /// Panics if the value is currently mutably borrowed.
     #[inline]
+    #[track_caller]
     pub fn borrow(&self) -> GcCellRef<'_, T> {
         match self.try_borrow() {
             Ok(value) => value,
@@ -542,6 +543,7 @@ impl<T: Trace + ?Sized> GcCell<T> {
     ///
     /// Panics if the value is currently borrowed.
     #[inline]
+    #[track_caller]
     pub fn borrow_mut(&self) -> GcCellRefMut<'_, T> {
         match self.try_borrow_mut() {
             Ok(value) => value,
