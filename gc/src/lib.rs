@@ -110,6 +110,24 @@ impl<T: ?Sized> Gc<T> {
     pub fn ptr_eq(this: &Gc<T>, other: &Gc<T>) -> bool {
         GcBox::ptr_eq(this.inner(), other.inner())
     }
+
+    /// Provides a raw pointer to the data.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use gc::Gc;
+    ///
+    /// let x = Gc::new("hello".to_owned());
+    /// let y = x.clone();
+    /// let x_ptr = Gc::as_ptr(&x);
+    /// assert_eq!(x_ptr, Gc::as_ptr(&y));
+    /// assert_eq!(unsafe { &*x_ptr }, "hello");
+    /// ```
+    pub fn as_ptr(this: &Gc<T>) -> *const T {
+        let ptr = this.inner_ptr();
+        GcBox::value_ptr(ptr)
+    }
 }
 
 /// Returns the given pointer with its root bit cleared.

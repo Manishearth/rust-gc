@@ -289,3 +289,31 @@ fn ptr_eq() {
     assert!(!Gc::ptr_eq(&b.0, &b2.0));
     assert!(!Gc::ptr_eq(&b.0, &a2));
 }
+
+#[test]
+fn as_ptr() {
+    #[derive(Finalize, Trace)]
+    struct A;
+
+    #[derive(Finalize, Trace)]
+    struct B(Gc<A>);
+
+    let a = Gc::new(A);
+    let aa = a.clone();
+    let a_ptr = Gc::as_ptr(&a);
+    assert_eq!(a_ptr, Gc::as_ptr(&aa));
+
+    let b =  Gc::new(B(a.clone()));
+    assert_eq!(a_ptr, Gc::as_ptr(&b.0));
+    let bb = Gc::new(B(a.clone()));
+    assert_eq!(a_ptr, Gc::as_ptr(&bb.0));
+
+    let a2 = Gc::new(A);
+    let a2_ptr = Gc::as_ptr(&a2);
+    assert_ne!(a_ptr, a2_ptr);
+    let b2 = Gc::new(B(a2.clone()));
+    assert_eq!(a2_ptr, Gc::as_ptr(&b2.0));
+    assert_ne!(a_ptr, Gc::as_ptr(&b2.0));
+    assert_ne!(Gc::as_ptr(&b.0), Gc::as_ptr(&b2.0));
+    assert_ne!(Gc::as_ptr(&b.0), a2_ptr);
+}
