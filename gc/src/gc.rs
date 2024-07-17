@@ -26,7 +26,7 @@ impl Drop for GcState {
 
 // Whether or not the thread is currently in the sweep phase of garbage collection.
 // During this phase, attempts to dereference a `Gc<T>` pointer will trigger a panic.
-thread_local!(pub static GC_DROPPING: Cell<bool> = Cell::new(false));
+thread_local!(pub static GC_DROPPING: Cell<bool> = const { Cell::new(false) });
 struct DropGuard;
 impl DropGuard {
     fn new() -> DropGuard {
