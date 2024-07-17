@@ -41,7 +41,7 @@ struct X(Box<dyn Trace>);
 fn drop_triggers_finalize() {
     FLAGS.with(|f| assert_eq!(f.get(), Flags(0, 0)));
     {
-        let _x = A { b: B };
+        let _x = X(Box::new(A { b: B }));
         FLAGS.with(|f| assert_eq!(f.get(), Flags(0, 0)));
     }
     FLAGS.with(|f| assert_eq!(f.get(), Flags(1, 1)));

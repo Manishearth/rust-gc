@@ -35,11 +35,6 @@ struct InnerBoxStr {
 }
 
 #[derive(Trace, Clone, Finalize)]
-struct InnerRcSlice {
-    inner: Box<[u32]>,
-}
-
-#[derive(Trace, Clone, Finalize)]
 struct InnerRcStr {
     inner: Rc<str>,
 }
@@ -52,6 +47,21 @@ struct Baz {
 
 #[test]
 fn test() {
+    unsafe {
+        InnerBoxSlice {
+            inner: Box::new([1, 2, 3]),
+        }
+        .trace();
+        InnerBoxStr {
+            inner: "abc".into(),
+        }
+        .trace();
+        InnerRcStr {
+            inner: "abc".into(),
+        }
+        .trace();
+    }
+
     let bar = Bar { inner: Foo };
     unsafe {
         bar.trace();

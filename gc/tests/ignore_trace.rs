@@ -7,6 +7,6 @@ struct S(#[unsafe_ignore_trace] Gc<()>);
 /// cycles through that `Gc`, but it should not result in panics.
 #[test]
 fn ignore_trace_gc() {
-    Gc::new(S(Gc::new(())));
+    *Gc::new(S(Gc::new(()))).0;
     force_collect();
 }
