@@ -747,7 +747,7 @@ impl<'a, T: ?Sized> GcCellRef<'a, T> {
         }
     }
 
-    /// Makes a new `GcCellRef` from a component of the borrowed data.
+    /// Makes a new `GcCellRef` for a component of the borrowed data.
     ///
     /// The `GcCell` is already immutably borrowed, so this cannot fail.
     ///
@@ -763,7 +763,7 @@ impl<'a, T: ?Sized> GcCellRef<'a, T> {
     /// let c = GcCell::new((5, 'b'));
     /// let b1: GcCellRef<(u32, char)> = c.borrow();
     /// let b2: GcCellRef<u32> = GcCellRef::map(b1, |t| &t.0);
-    /// //assert_eq!(b2, 5);
+    /// assert_eq!(*b2, 5);
     /// ```
     #[inline]
     pub fn map<U, F>(orig: Self, f: F) -> GcCellRef<'a, U>
