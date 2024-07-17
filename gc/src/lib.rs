@@ -16,7 +16,7 @@ use std::cmp::Ordering;
 use std::fmt::{self, Debug, Display};
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
-use std::mem;
+use std::mem::{self, ManuallyDrop};
 use std::ops::{Deref, DerefMut};
 use std::ptr::{self, NonNull};
 use std::rc::Rc;
@@ -194,9 +194,7 @@ impl<T: ?Sized> Gc<T> {
     /// unsafe { Gc::from_raw(x_ptr) };
     /// ```
     pub fn into_raw(this: Self) -> *const T {
-        let ptr: *const T = GcBox::value_ptr(this.inner_ptr());
-        mem::forget(this);
-        ptr
+        GcBox::value_ptr(ManuallyDrop::new(this).inner_ptr())
     }
 
     /// Constructs an `Gc` from a raw pointer.
@@ -771,16 +769,16 @@ impl<'a, T: ?Sized> GcCellRef<'a, T> {
         U: ?Sized,
         F: FnOnce(&T) -> &U,
     {
-        let ret = GcCellRef {
-            flags: orig.flags,
-            value: f(orig.value),
-        };
+        let value = f(orig.value);
 
         // We have to tell the compiler not to call the destructor of GcCellRef,
         // because it will update the borrow flags.
-        std::mem::forget(orig);
+        let orig = ManuallyDrop::new(orig);
 
-        ret
+        GcCellRef {
+            flags: orig.flags,
+            value,
+        }
     }
 
     /// Splits a `GcCellRef` into multiple `GcCellRef`s for different components of the borrowed data.
@@ -812,7 +810,11 @@ impl<'a, T: ?Sized> GcCellRef<'a, T> {
 
         orig.flags.set(orig.flags.get().add_reading());
 
-        let ret = (
+        // We have to tell the compiler not to call the destructor of GcCellRef,
+        // because it will update the borrow flags.
+        let orig = ManuallyDrop::new(orig);
+
+        (
             GcCellRef {
                 flags: orig.flags,
                 value: a,
@@ -821,13 +823,7 @@ impl<'a, T: ?Sized> GcCellRef<'a, T> {
                 flags: orig.flags,
                 value: b,
             },
-        );
-
-        // We have to tell the compiler not to call the destructor of GcCellRef,
-        // because it will update the borrow flags.
-        std::mem::forget(orig);
-
-        ret
+        )
     }
 }
 
