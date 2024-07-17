@@ -906,7 +906,7 @@ impl<'a, T: Trace + ?Sized, U: ?Sized> GcCellRefMut<'a, T, U> {
     /// Makes a new `GcCellRefMut` for a component of the borrowed data, e.g., an enum
     /// variant.
     ///
-    /// The `GcCellRefMut` is already mutably borrowed, so this cannot fail.
+    /// The `GcCell` is already mutably borrowed, so this cannot fail.
     ///
     /// This is an associated function that needs to be used as
     /// `GcCellRefMut::map(...)`. A method would interfere with methods of the same
@@ -944,6 +944,55 @@ impl<'a, T: Trace + ?Sized, U: ?Sized> GcCellRefMut<'a, T, U> {
         GcCellRefMut {
             gc_cell,
             value: f(value),
+        }
+    }
+
+    /// Makes a new `GcCellRefMut` for an optional component of the borrowed
+    /// data. The original guard is returned as an `Err(..)` if the closure
+    /// returns `None`.
+    ///
+    /// The `GcCell` is already mutably borrowed, so this cannot fail.
+    ///
+    /// This is an associated function that needs to be used as
+    /// `GcCellRefMut::filter_map(...)`. A method would interfere with methods
+    /// of the same name on the contents of a `GcCell` used through `Deref`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use gc::{GcCell, GcCellRefMut};
+    ///
+    /// let c = GcCell::new(vec![1, 2, 3]);
+    ///
+    /// {
+    ///     let b1: GcCellRefMut<Vec<u32>> = c.borrow_mut();
+    ///     let mut b2: Result<GcCellRefMut<Vec<u32>, u32>, _> = GcCellRefMut::filter_map(b1, |v| v.get_mut(1));
+    ///
+    ///     if let Ok(mut b2) = b2 {
+    ///         *b2 += 2;
+    ///     }
+    /// }
+    ///
+    /// assert_eq!(*c.borrow(), vec![1, 4, 3]);
+    /// ```
+    #[inline]
+    pub fn filter_map<V, F>(orig: Self, f: F) -> Result<GcCellRefMut<'a, T, V>, Self>
+    where
+        V: ?Sized,
+        F: FnOnce(&mut U) -> Option<&mut V>,
+    {
+        let gc_cell = orig.gc_cell;
+
+        // Use MaybeUninit to avoid calling the destructor of
+        // GcCellRefMut (which would update the borrow flags) and to
+        // avoid duplicating the mutable reference orig.value (which
+        // would be UB).
+        let orig = mem::MaybeUninit::new(orig);
+        let value = unsafe { ptr::addr_of!((*orig.as_ptr()).value).read() };
+
+        match f(value) {
+            None => Err(unsafe { orig.assume_init() }),
+            Some(value) => Ok(GcCellRefMut { gc_cell, value }),
         }
     }
 }
