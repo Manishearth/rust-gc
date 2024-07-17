@@ -16,7 +16,7 @@ use std::cmp::Ordering;
 use std::fmt::{self, Debug, Display};
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
-use std::mem;
+use std::mem::{self, ManuallyDrop};
 use std::ops::{Deref, DerefMut};
 use std::ptr::{self, NonNull};
 use std::rc::Rc;
@@ -194,9 +194,7 @@ impl<T: ?Sized> Gc<T> {
     /// unsafe { Gc::from_raw(x_ptr) };
     /// ```
     pub fn into_raw(this: Self) -> *const T {
-        let ptr: *const T = GcBox::value_ptr(this.inner_ptr());
-        mem::forget(this);
-        ptr
+        GcBox::value_ptr(ManuallyDrop::new(this).inner_ptr())
     }
 
     /// Constructs an `Gc` from a raw pointer.
@@ -747,7 +745,7 @@ impl<'a, T: ?Sized> GcCellRef<'a, T> {
         }
     }
 
-    /// Makes a new `GcCellRef` from a component of the borrowed data.
+    /// Makes a new `GcCellRef` for a component of the borrowed data.
     ///
     /// The `GcCell` is already immutably borrowed, so this cannot fail.
     ///
@@ -763,7 +761,7 @@ impl<'a, T: ?Sized> GcCellRef<'a, T> {
     /// let c = GcCell::new((5, 'b'));
     /// let b1: GcCellRef<(u32, char)> = c.borrow();
     /// let b2: GcCellRef<u32> = GcCellRef::map(b1, |t| &t.0);
-    /// //assert_eq!(b2, 5);
+    /// assert_eq!(*b2, 5);
     /// ```
     #[inline]
     pub fn map<U, F>(orig: Self, f: F) -> GcCellRef<'a, U>
@@ -771,16 +769,57 @@ impl<'a, T: ?Sized> GcCellRef<'a, T> {
         U: ?Sized,
         F: FnOnce(&T) -> &U,
     {
-        let ret = GcCellRef {
-            flags: orig.flags,
-            value: f(orig.value),
-        };
+        let value = f(orig.value);
 
         // We have to tell the compiler not to call the destructor of GcCellRef,
         // because it will update the borrow flags.
-        std::mem::forget(orig);
+        let orig = ManuallyDrop::new(orig);
 
-        ret
+        GcCellRef {
+            flags: orig.flags,
+            value,
+        }
+    }
+
+    /// Makes a new `GcCellRef` for an optional component of the borrowed data.
+    /// The original guard is returned as an `Err(..)` if the closure returns
+    /// `None`.
+    ///
+    /// The `GcCell` is already immutably borrowed, so this cannot fail.
+    ///
+    /// This is an associated function that needs to be used as
+    /// `GcCellRef::filter_map(...)`. A method would interfere with methods of
+    /// the same name on the contents of a `GcCellRef` used through `Deref`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use gc::{GcCell, GcCellRef};
+    ///
+    /// let c = GcCell::new(vec![1, 2, 3]);
+    /// let b1: GcCellRef<Vec<u32>> = c.borrow();
+    /// let b2: Result<GcCellRef<u32>, _> = GcCellRef::filter_map(b1, |v| v.get(1));
+    /// assert_eq!(*b2.unwrap(), 2);
+    /// ```
+    #[inline]
+    pub fn filter_map<U, F>(orig: Self, f: F) -> Result<GcCellRef<'a, U>, Self>
+    where
+        U: ?Sized,
+        F: FnOnce(&T) -> Option<&U>,
+    {
+        match f(orig.value) {
+            None => Err(orig),
+            Some(value) => {
+                // We have to tell the compiler not to call the destructor of GcCellRef,
+                // because it will update the borrow flags.
+                let orig = ManuallyDrop::new(orig);
+
+                Ok(GcCellRef {
+                    flags: orig.flags,
+                    value,
+                })
+            }
+        }
     }
 
     /// Splits a `GcCellRef` into multiple `GcCellRef`s for different components of the borrowed data.
@@ -812,7 +851,11 @@ impl<'a, T: ?Sized> GcCellRef<'a, T> {
 
         orig.flags.set(orig.flags.get().add_reading());
 
-        let ret = (
+        // We have to tell the compiler not to call the destructor of GcCellRef,
+        // because it will update the borrow flags.
+        let orig = ManuallyDrop::new(orig);
+
+        (
             GcCellRef {
                 flags: orig.flags,
                 value: a,
@@ -821,13 +864,7 @@ impl<'a, T: ?Sized> GcCellRef<'a, T> {
                 flags: orig.flags,
                 value: b,
             },
-        );
-
-        // We have to tell the compiler not to call the destructor of GcCellRef,
-        // because it will update the borrow flags.
-        std::mem::forget(orig);
-
-        ret
+        )
     }
 }
 
@@ -869,7 +906,7 @@ impl<'a, T: Trace + ?Sized, U: ?Sized> GcCellRefMut<'a, T, U> {
     /// Makes a new `GcCellRefMut` for a component of the borrowed data, e.g., an enum
     /// variant.
     ///
-    /// The `GcCellRefMut` is already mutably borrowed, so this cannot fail.
+    /// The `GcCell` is already mutably borrowed, so this cannot fail.
     ///
     /// This is an associated function that needs to be used as
     /// `GcCellRefMut::map(...)`. A method would interfere with methods of the same
@@ -907,6 +944,55 @@ impl<'a, T: Trace + ?Sized, U: ?Sized> GcCellRefMut<'a, T, U> {
         GcCellRefMut {
             gc_cell,
             value: f(value),
+        }
+    }
+
+    /// Makes a new `GcCellRefMut` for an optional component of the borrowed
+    /// data. The original guard is returned as an `Err(..)` if the closure
+    /// returns `None`.
+    ///
+    /// The `GcCell` is already mutably borrowed, so this cannot fail.
+    ///
+    /// This is an associated function that needs to be used as
+    /// `GcCellRefMut::filter_map(...)`. A method would interfere with methods
+    /// of the same name on the contents of a `GcCell` used through `Deref`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use gc::{GcCell, GcCellRefMut};
+    ///
+    /// let c = GcCell::new(vec![1, 2, 3]);
+    ///
+    /// {
+    ///     let b1: GcCellRefMut<Vec<u32>> = c.borrow_mut();
+    ///     let mut b2: Result<GcCellRefMut<Vec<u32>, u32>, _> = GcCellRefMut::filter_map(b1, |v| v.get_mut(1));
+    ///
+    ///     if let Ok(mut b2) = b2 {
+    ///         *b2 += 2;
+    ///     }
+    /// }
+    ///
+    /// assert_eq!(*c.borrow(), vec![1, 4, 3]);
+    /// ```
+    #[inline]
+    pub fn filter_map<V, F>(orig: Self, f: F) -> Result<GcCellRefMut<'a, T, V>, Self>
+    where
+        V: ?Sized,
+        F: FnOnce(&mut U) -> Option<&mut V>,
+    {
+        let gc_cell = orig.gc_cell;
+
+        // Use MaybeUninit to avoid calling the destructor of
+        // GcCellRefMut (which would update the borrow flags) and to
+        // avoid duplicating the mutable reference orig.value (which
+        // would be UB).
+        let orig = mem::MaybeUninit::new(orig);
+        let value = unsafe { ptr::addr_of!((*orig.as_ptr()).value).read() };
+
+        match f(value) {
+            None => Err(unsafe { orig.assume_init() }),
+            Some(value) => Ok(GcCellRefMut { gc_cell, value }),
         }
     }
 }
