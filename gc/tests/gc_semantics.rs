@@ -303,7 +303,7 @@ fn as_ptr() {
     let a_ptr = Gc::as_ptr(&a);
     assert_eq!(a_ptr, Gc::as_ptr(&aa));
 
-    let b =  Gc::new(B(a.clone()));
+    let b = Gc::new(B(a.clone()));
     assert_eq!(a_ptr, Gc::as_ptr(&b.0));
     let bb = Gc::new(B(a.clone()));
     assert_eq!(a_ptr, Gc::as_ptr(&bb.0));

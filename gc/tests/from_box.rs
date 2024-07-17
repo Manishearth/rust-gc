@@ -1,9 +1,14 @@
-use gc::{Finalize, Gc, Trace};
+use gc::Gc;
+#[cfg(feature = "nightly")]
+use gc::{Finalize, Trace};
 
+#[cfg(feature = "nightly")]
 trait Foo: Trace {}
 
+#[cfg(feature = "nightly")]
 #[derive(Trace, Finalize)]
 struct Bar;
+#[cfg(feature = "nightly")]
 impl Foo for Bar {}
 
 #[test]
