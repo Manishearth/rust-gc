@@ -781,6 +781,47 @@ impl<'a, T: ?Sized> GcCellRef<'a, T> {
         }
     }
 
+    /// Makes a new `GcCellRef` for an optional component of the borrowed data.
+    /// The original guard is returned as an `Err(..)` if the closure returns
+    /// `None`.
+    ///
+    /// The `GcCell` is already immutably borrowed, so this cannot fail.
+    ///
+    /// This is an associated function that needs to be used as
+    /// `GcCellRef::filter_map(...)`. A method would interfere with methods of
+    /// the same name on the contents of a `GcCellRef` used through `Deref`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use gc::{GcCell, GcCellRef};
+    ///
+    /// let c = GcCell::new(vec![1, 2, 3]);
+    /// let b1: GcCellRef<Vec<u32>> = c.borrow();
+    /// let b2: Result<GcCellRef<u32>, _> = GcCellRef::filter_map(b1, |v| v.get(1));
+    /// assert_eq!(*b2.unwrap(), 2);
+    /// ```
+    #[inline]
+    pub fn filter_map<U, F>(orig: Self, f: F) -> Result<GcCellRef<'a, U>, Self>
+    where
+        U: ?Sized,
+        F: FnOnce(&T) -> Option<&U>,
+    {
+        match f(orig.value) {
+            None => Err(orig),
+            Some(value) => {
+                // We have to tell the compiler not to call the destructor of GcCellRef,
+                // because it will update the borrow flags.
+                let orig = ManuallyDrop::new(orig);
+
+                Ok(GcCellRef {
+                    flags: orig.flags,
+                    value,
+                })
+            }
+        }
+    }
+
     /// Splits a `GcCellRef` into multiple `GcCellRef`s for different components of the borrowed data.
     ///
     /// The `GcCell` is already immutably borrowed, so this cannot fail.
