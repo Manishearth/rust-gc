@@ -47,6 +47,8 @@ impl Finalize for Foo {
         // Clean up resources for Foo, because we think it will be destroyed.
         // Foo may not be destroyed after a call to finalize, as another
         // finalizer may create a reference to it due to reference cycles.
+        // Recursive calls of Finalize::finalize on fields are not required here
+        // because this is handled by Trace::finalize_glue already.
     }
 }
 ```
