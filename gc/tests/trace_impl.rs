@@ -7,6 +7,9 @@ thread_local!(static X: RefCell<u8> = RefCell::new(0));
 #[derive(Copy, Clone, Finalize)]
 struct Foo;
 
+#[derive(Trace, Finalize)]
+struct FooWithoutCopy;
+
 unsafe impl Trace for Foo {
     unsafe fn trace(&self) {
         X.with(|x| {
@@ -45,6 +48,12 @@ struct Baz {
     b: Bar,
 }
 
+#[derive(Trace)]
+#[trivially_drop]
+struct Dereferenced {
+    a: FooWithoutCopy,
+}
+
 #[test]
 fn test() {
     unsafe {
@@ -75,4 +84,6 @@ fn test() {
         baz.trace();
     }
     X.with(|x| assert!(*x.borrow() == 3));
+
+    let Dereferenced { a: _a } = Dereferenced { a: FooWithoutCopy };
 }
