@@ -298,9 +298,9 @@ fn collect_garbage(st: &mut GcState) {
     unsafe fn sweep(finalized: Vec<Unmarked<'_>>, bytes_allocated: &mut usize) {
         let _guard = DropGuard::new();
         for node in finalized.into_iter().rev() {
-            if node.this.as_ref().header.is_marked() {
-                continue;
-            }
+            // sanity check. If this trips we have violated an unsafe invarant.
+            // This won't catch all UB, just direct reclamation of roots!!
+            assert_eq!(node.this.as_ref().header.roots(), 0, "Reclaimed node should not be rooted");
             let incoming = node.incoming;
             let node = Box::from_raw(node.this.as_ptr());
             *bytes_allocated -= mem::size_of_val::<GcBox<_>>(&*node);
