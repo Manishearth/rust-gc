@@ -48,12 +48,12 @@ fn drop_triggers_finalize() {
 }
 
 #[derive(Trace)]
-struct Ressurection {
+struct Resurrection {
     escape: Gc<GcCell<Gc<String>>>,
     value: Gc<String>,
 }
 
-impl Finalize for Ressurection {
+impl Finalize for Resurrection {
     fn finalize(&self) {
         *self.escape.borrow_mut() = self.value.clone();
     }
@@ -62,9 +62,9 @@ impl Finalize for Ressurection {
 // run this with miri to detect UB
 // cargo +nightly miri test -p gc --test finalize
 #[test]
-fn finalizer_can_ressurect() {
+fn finalizer_can_resurrect() {
     let escape = Gc::new(GcCell::new(Gc::new(String::new())));
-    let value = Gc::new(GcCell::new(Ressurection {
+    let value = Gc::new(GcCell::new(Resurrection {
         escape: escape.clone(),
         value: Gc::new(String::from("Hello world")),
     }));
