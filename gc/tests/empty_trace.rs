@@ -1,11 +1,10 @@
 #[allow(dead_code)]
 mod static_tests {
-    use gc::Gc;
-    use gc_derive::{EmptyTrace, Finalize, Trace};
+    use gc::{EmptyTrace, Finalize, Gc, Trace};
     use std::rc::Rc;
-    
+
     #[derive(EmptyTrace)]
-    struct StructWithEmptyTrace(Rc<String>);
+    struct StructWithEmptyTrace(Rc<Option<StructWithEmptyTrace>>);
 
     #[derive(Trace, Finalize)]
     struct Traceable<T> {
@@ -17,10 +16,9 @@ mod static_tests {
     }
 
     fn test_empty_trace() {
-        let x = Rc::new(String::new());
         Gc::new(Traceable {
-            a: StructWithEmptyTrace(x.clone()),
-            b: x.clone(),
+            a: StructWithEmptyTrace(Rc::new(None)),
+            b: Rc::new(String::new()),
         });
     }
 }

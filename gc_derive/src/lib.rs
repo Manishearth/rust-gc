@@ -1,7 +1,7 @@
-use quote::quote;
-use syn::parse_quote_spanned;
+use quote::{format_ident, quote, ToTokens};
 use syn::spanned::Spanned;
-use synstructure::{decl_derive, AddBounds, Structure};
+use syn::{parse_quote_spanned, GenericParam, WherePredicate};
+use synstructure::{decl_derive, AddBounds, Structure, VariantInfo};
 
 decl_derive!([Trace, attributes(unsafe_ignore_trace, empty_trace)] => derive_trace);
 
@@ -100,20 +100,60 @@ fn derive_finalize(s: Structure<'_>) -> proc_macro2::TokenStream {
 
 decl_derive!([EmptyTrace] => derive_empty_trace);
 
-// TODO: Does not work on self-referential types
-fn derive_empty_trace(mut s: Structure<'_>) -> proc_macro2::TokenStream {
-    // Add where bounds for all bindings manually because synstructure only adds them if they depend on one of the parameters.
-    let mut where_predicates = Vec::new();
-    for v in s.variants() {
-        for bi in v.bindings() {
+fn derive_empty_trace(s: Structure<'_>) -> proc_macro2::TokenStream {
+    let s_ast = &s.ast();
+    let name = &s_ast.ident;
+    let temp_name = format_ident!("_{name}");
+    let params = &s_ast.generics.params;
+    let param_names = params
+        .iter()
+        .map(|p| match p {
+            GenericParam::Lifetime(p) => p.to_token_stream(),
+            GenericParam::Type(p) => p.ident.to_token_stream(),
+            GenericParam::Const(p) => p.ident.to_token_stream(),
+        })
+        .collect::<Vec<_>>();
+    let where_predicates = &s_ast
+        .generics
+        .where_clause
+        .iter()
+        .flat_map(|wc| &wc.predicates)
+        .collect::<Vec<_>>();
+
+    // Require that all bindings implement `EmptyTrace`
+    let bindings = s.variants().iter().flat_map(VariantInfo::bindings);
+    let additional_where_predicates: Vec<WherePredicate> = bindings
+        .map(|bi| {
             let ty = &bi.ast().ty;
             let span = ty.span();
-            where_predicates.push(parse_quote_spanned! { span=> #ty: ::gc::EmptyTrace });
-        }
+            parse_quote_spanned! { span=> #ty: ::gc::EmptyTrace }
+        })
+        .collect();
+
+    // If any bindings in `s` refer to `s` itself then trait resolution could run into a cycle through our generated where predicates.
+    // We solve this with the following hack:
+    // Locally, we rename `s` and replace it with a temporary type of the same shape.
+    // That type unconditionally implements `EmptyTrace`, which might, technically, be unsafe but is fine since we never instantiate that type.
+    // Its only purpose is to stand in for `s` inside the generated predicates in order to break the cycle.
+    quote! {
+        const _: () = {
+            type #temp_name<#params> = #name<#(#param_names),*>;
+            {
+                #s_ast
+
+                unsafe impl<#params> ::gc::EmptyTrace
+                for #name<#(#param_names),*>
+                where
+                    #(#where_predicates),*
+                {}
+
+                unsafe impl<#params> ::gc::EmptyTrace
+                for #temp_name<#(#param_names),*>
+                where
+                    #(#where_predicates),*
+                    #(#additional_where_predicates),*
+                {}
+            }
+        };
     }
-    for p in where_predicates {
-        s.add_where_predicate(p);
-    }
-    s.add_bounds(AddBounds::None);
-    s.unsafe_bound_impl(quote! { ::gc::EmptyTrace }, quote! {})
 }
