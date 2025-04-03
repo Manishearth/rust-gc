@@ -1,4 +1,5 @@
 use std::borrow::{Cow, ToOwned};
+use std::cell::{Cell, OnceCell, RefCell};
 use std::collections::hash_map::{DefaultHasher, RandomState};
 use std::collections::{BTreeMap, BTreeSet, BinaryHeap, HashMap, HashSet, LinkedList, VecDeque};
 use std::hash::BuildHasherDefault;
@@ -11,6 +12,7 @@ use std::num::{
 };
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use std::sync::{Arc, Mutex, OnceLock, RwLock};
 use std::sync::atomic::{
     AtomicBool, AtomicI16, AtomicI32, AtomicI64, AtomicI8, AtomicIsize, AtomicU16, AtomicU32,
     AtomicU64, AtomicU8, AtomicUsize,
@@ -105,10 +107,60 @@ macro_rules! custom_trace {
     };
 }
 
-impl<T: ?Sized> Finalize for &'static T {}
-unsafe impl<T: ?Sized> Trace for &'static T {
+/// A marker trait for types that don't require tracing.
+/// 
+/// # Safety
+/// TODO: Safety conditions
+pub unsafe trait EmptyTrace {}
+
+// TODO: The README needs to be updated to explain when `Rc` and the other types here can be managed by GC.
+impl<T: EmptyTrace + ?Sized> Finalize for Rc<T> {}
+unsafe impl<T: EmptyTrace + ?Sized> Trace for Rc<T> {
     unsafe_empty_trace!();
 }
+unsafe impl<T: EmptyTrace + ?Sized> EmptyTrace for Rc<T> {}
+
+impl<T: EmptyTrace + ?Sized> Finalize for Arc<T> {}
+unsafe impl<T: EmptyTrace + ?Sized> Trace for Arc<T> {
+    unsafe_empty_trace!();
+}
+unsafe impl<T: EmptyTrace + ?Sized> EmptyTrace for Arc<T> {}
+
+impl<T: EmptyTrace + ?Sized> Finalize for RefCell<T> {}
+unsafe impl<T: EmptyTrace + ?Sized> Trace for RefCell<T> {
+    unsafe_empty_trace!();
+}
+unsafe impl<T: EmptyTrace + ?Sized> EmptyTrace for RefCell<T> {}
+
+impl<T: EmptyTrace + ?Sized> Finalize for Cell<T> {}
+unsafe impl<T: EmptyTrace + ?Sized> Trace for Cell<T> {
+    unsafe_empty_trace!();
+}
+unsafe impl<T: EmptyTrace + ?Sized> EmptyTrace for Cell<T> {}
+
+impl<T: EmptyTrace> Finalize for OnceCell<T> {}
+unsafe impl<T: EmptyTrace> Trace for OnceCell<T> {
+    unsafe_empty_trace!();
+}
+unsafe impl<T: EmptyTrace> EmptyTrace for OnceCell<T> {}
+
+impl<T: EmptyTrace + ?Sized> Finalize for Mutex<T> {}
+unsafe impl<T: EmptyTrace + ?Sized> Trace for Mutex<T> {
+    unsafe_empty_trace!();
+}
+unsafe impl<T: EmptyTrace + ?Sized> EmptyTrace for Mutex<T> {}
+
+impl<T: EmptyTrace + ?Sized> Finalize for RwLock<T> {}
+unsafe impl<T: EmptyTrace + ?Sized> Trace for RwLock<T> {
+    unsafe_empty_trace!();
+}
+unsafe impl<T: EmptyTrace + ?Sized> EmptyTrace for RwLock<T> {}
+
+impl<T: EmptyTrace> Finalize for OnceLock<T> {}
+unsafe impl<T: EmptyTrace> Trace for OnceLock<T> {
+    unsafe_empty_trace!();
+}
+unsafe impl<T: EmptyTrace> EmptyTrace for OnceLock<T> {}
 
 macro_rules! simple_empty_finalize_trace {
     ($($T:ty),*) => {
@@ -117,6 +169,8 @@ macro_rules! simple_empty_finalize_trace {
             impl Finalize for $T {}
             #[allow(deprecated)]
             unsafe impl Trace for $T { unsafe_empty_trace!(); }
+            #[allow(deprecated)]
+            unsafe impl EmptyTrace for $T {}
         )*
     }
 }
@@ -141,7 +195,6 @@ simple_empty_finalize_trace![
     char,
     String,
     str,
-    Rc<str>,
     Path,
     PathBuf,
     NonZeroIsize,
@@ -172,6 +225,13 @@ simple_empty_finalize_trace![
     RandomState
 ];
 
+// We don't care about non-static references because they can never be owned by a `Gc`.
+impl<T: ?Sized> Finalize for &'static T {}
+unsafe impl<T: ?Sized> Trace for &'static T {
+    unsafe_empty_trace!();
+}
+unsafe impl<T: ?Sized> EmptyTrace for &'static T {}
+
 impl<T, const N: usize> Finalize for [T; N] {}
 unsafe impl<T: Trace, const N: usize> Trace for [T; N] {
     custom_trace!(this, {
@@ -180,11 +240,13 @@ unsafe impl<T: Trace, const N: usize> Trace for [T; N] {
         }
     });
 }
+unsafe impl<T: EmptyTrace, const N: usize> EmptyTrace for [T; N] {}
 
 macro_rules! fn_finalize_trace_one {
     ($ty:ty $(,$args:ident)*) => {
         impl<Ret $(,$args)*> Finalize for $ty {}
         unsafe impl<Ret $(,$args)*> Trace for $ty { unsafe_empty_trace!(); }
+        unsafe impl<Ret $(,$args)*> EmptyTrace for $ty {}
     }
 }
 macro_rules! fn_finalize_trace_group {
@@ -215,6 +277,7 @@ macro_rules! tuple_finalize_trace {
                 $(mark($args);)*
             });
         }
+        unsafe impl<$($args: $crate::EmptyTrace),*> EmptyTrace for ($($args,)*) {}
     }
 }
 
@@ -249,6 +312,7 @@ unsafe impl<T: Trace + ?Sized> Trace for Box<T> {
         mark(&**this);
     });
 }
+unsafe impl<T: EmptyTrace + ?Sized> EmptyTrace for Box<T> {}
 
 impl<T> Finalize for [T] {}
 unsafe impl<T: Trace> Trace for [T] {
@@ -258,6 +322,7 @@ unsafe impl<T: Trace> Trace for [T] {
         }
     });
 }
+unsafe impl<T: EmptyTrace> EmptyTrace for [T] {}
 
 impl<T> Finalize for Vec<T> {}
 unsafe impl<T: Trace> Trace for Vec<T> {
@@ -267,6 +332,7 @@ unsafe impl<T: Trace> Trace for Vec<T> {
         }
     });
 }
+unsafe impl<T: EmptyTrace> EmptyTrace for Vec<T> {}
 
 impl<T> Finalize for Option<T> {}
 unsafe impl<T: Trace> Trace for Option<T> {
@@ -276,6 +342,7 @@ unsafe impl<T: Trace> Trace for Option<T> {
         }
     });
 }
+unsafe impl<T: EmptyTrace> EmptyTrace for Option<T> {}
 
 impl<T, E> Finalize for Result<T, E> {}
 unsafe impl<T: Trace, E: Trace> Trace for Result<T, E> {
@@ -286,6 +353,7 @@ unsafe impl<T: Trace, E: Trace> Trace for Result<T, E> {
         }
     });
 }
+unsafe impl<T: EmptyTrace, E: Trace> EmptyTrace for Result<T, E> {}
 
 impl<T> Finalize for BinaryHeap<T> {}
 unsafe impl<T: Trace> Trace for BinaryHeap<T> {
@@ -295,6 +363,7 @@ unsafe impl<T: Trace> Trace for BinaryHeap<T> {
         }
     });
 }
+unsafe impl<T: EmptyTrace> EmptyTrace for BinaryHeap<T> {}
 
 impl<K, V> Finalize for BTreeMap<K, V> {}
 unsafe impl<K: Trace, V: Trace> Trace for BTreeMap<K, V> {
@@ -305,6 +374,7 @@ unsafe impl<K: Trace, V: Trace> Trace for BTreeMap<K, V> {
         }
     });
 }
+unsafe impl<K: EmptyTrace, V: EmptyTrace> EmptyTrace for BTreeMap<K, V> {}
 
 impl<T> Finalize for BTreeSet<T> {}
 unsafe impl<T: Trace> Trace for BTreeSet<T> {
@@ -314,6 +384,7 @@ unsafe impl<T: Trace> Trace for BTreeSet<T> {
         }
     });
 }
+unsafe impl<T: EmptyTrace> EmptyTrace for BTreeSet<T> {}
 
 impl<K, V, S> Finalize for HashMap<K, V, S> {}
 unsafe impl<K: Trace, V: Trace, S: Trace> Trace for HashMap<K, V, S> {
@@ -325,6 +396,7 @@ unsafe impl<K: Trace, V: Trace, S: Trace> Trace for HashMap<K, V, S> {
         }
     });
 }
+unsafe impl<K: EmptyTrace, V: EmptyTrace> EmptyTrace for HashMap<K, V> {}
 
 impl<T, S> Finalize for HashSet<T, S> {}
 unsafe impl<T: Trace, S: Trace> Trace for HashSet<T, S> {
@@ -335,6 +407,7 @@ unsafe impl<T: Trace, S: Trace> Trace for HashSet<T, S> {
         }
     });
 }
+unsafe impl<T: EmptyTrace, S: EmptyTrace> EmptyTrace for HashSet<T, S> {}
 
 impl<T> Finalize for LinkedList<T> {}
 unsafe impl<T: Trace> Trace for LinkedList<T> {
@@ -344,11 +417,13 @@ unsafe impl<T: Trace> Trace for LinkedList<T> {
         }
     });
 }
+unsafe impl<T: EmptyTrace> EmptyTrace for LinkedList<T> {}
 
 impl<T: ?Sized> Finalize for PhantomData<T> {}
 unsafe impl<T: ?Sized> Trace for PhantomData<T> {
     unsafe_empty_trace!();
 }
+unsafe impl<T: EmptyTrace> EmptyTrace for PhantomData<T> {}
 
 impl<T> Finalize for VecDeque<T> {}
 unsafe impl<T: Trace> Trace for VecDeque<T> {
@@ -358,8 +433,9 @@ unsafe impl<T: Trace> Trace for VecDeque<T> {
         }
     });
 }
+unsafe impl<T: EmptyTrace> EmptyTrace for VecDeque<T> {}
 
-impl<'a, T: ToOwned + ?Sized> Finalize for Cow<'a, T>{}
+impl<'a, T: ToOwned + ?Sized> Finalize for Cow<'a, T> {}
 unsafe impl<'a, T: ToOwned + ?Sized> Trace for Cow<'a, T>
 where
     T::Owned: Trace,
@@ -370,8 +446,10 @@ where
         }
     });
 }
+unsafe impl<'a, T: ToOwned + ?Sized> EmptyTrace for Cow<'a, T> where T::Owned: EmptyTrace {}
 
 impl<T> Finalize for BuildHasherDefault<T> {}
 unsafe impl<T> Trace for BuildHasherDefault<T> {
     unsafe_empty_trace!();
 }
+unsafe impl<T> EmptyTrace for BuildHasherDefault<T> {}
