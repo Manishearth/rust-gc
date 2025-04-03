@@ -3,7 +3,7 @@ use syn::spanned::Spanned;
 use syn::{parse_quote_spanned, GenericParam, WherePredicate};
 use synstructure::{decl_derive, AddBounds, Structure, VariantInfo};
 
-decl_derive!([Trace, attributes(unsafe_ignore_trace, empty_trace)] => derive_trace);
+decl_derive!([Trace, attributes(unsafe_ignore_trace)] => derive_trace);
 
 fn derive_trace(mut s: Structure<'_>) -> proc_macro2::TokenStream {
     s.filter(|bi| {
@@ -12,37 +12,6 @@ fn derive_trace(mut s: Structure<'_>) -> proc_macro2::TokenStream {
             .iter()
             .any(|attr| attr.path().is_ident("unsafe_ignore_trace"))
     });
-
-    // We also implement drop to prevent unsafe drop implementations on this
-    // type and encourage people to use Finalize. This implementation will
-    // call `Finalize::finalize` if it is safe to do so.
-    let drop_impl = s.unbound_impl(
-        quote!(::std::ops::Drop),
-        quote! {
-            fn drop(&mut self) {
-                if ::gc::finalizer_safe() {
-                    ::gc::Finalize::finalize(self);
-                }
-            }
-        },
-    );
-
-    // Separate all the bindings that were annotated with `#[empty_trace]`
-    let empty_trace_bindings = s.drain_filter(|bi| {
-        bi.ast()
-            .attrs
-            .iter()
-            .any(|attr| attr.path().is_ident("empty_trace"))
-    });
-
-    // Require the annotated bindings to implement `EmptyTrace`
-    for variant in empty_trace_bindings.variants() {
-        for binding in variant.bindings() {
-            let ty = &binding.ast().ty;
-            s.add_where_predicate(parse_quote_spanned!(ty.span()=> #ty: ::gc::EmptyTrace));
-        }
-    }
-
     let trace_body = s.each(|bi| quote!(mark(#bi)));
 
     s.add_bounds(AddBounds::Fields);
@@ -81,6 +50,20 @@ fn derive_trace(mut s: Structure<'_>) -> proc_macro2::TokenStream {
                     ::gc::Trace::finalize_glue(it);
                 }
                 match *self { #trace_body }
+            }
+        },
+    );
+
+    // We also implement drop to prevent unsafe drop implementations on this
+    // type and encourage people to use Finalize. This implementation will
+    // call `Finalize::finalize` if it is safe to do so.
+    let drop_impl = s.unbound_impl(
+        quote!(::std::ops::Drop),
+        quote! {
+            fn drop(&mut self) {
+                if ::gc::finalizer_safe() {
+                    ::gc::Finalize::finalize(self);
+                }
             }
         },
     );
