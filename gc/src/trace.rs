@@ -100,6 +100,7 @@ macro_rules! custom_trace {
             }
             $crate::Finalize::finalize(self);
             let $this = self;
+            #[allow(unused_unsafe)]
             $body
         }
     };
