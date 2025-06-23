@@ -1,9 +1,14 @@
 use quote::quote;
-use synstructure::{decl_derive, AddBounds, Structure};
+use synstructure::{decl_derive, AddBounds, BindStyle, Structure};
 
-decl_derive!([Trace, attributes(unsafe_ignore_trace)] => derive_trace);
+decl_derive!([Trace, attributes(unsafe_ignore_trace, trivially_drop)] => derive_trace);
 
 fn derive_trace(mut s: Structure<'_>) -> proc_macro2::TokenStream {
+    let is_trivially_drop = s
+        .ast()
+        .attrs
+        .iter()
+        .any(|attr| attr.path.is_ident("trivially_drop"));
     s.filter(|bi| {
         !bi.ast()
             .attrs
@@ -52,23 +57,41 @@ fn derive_trace(mut s: Structure<'_>) -> proc_macro2::TokenStream {
         },
     );
 
-    // We also implement drop to prevent unsafe drop implementations on this
-    // type and encourage people to use Finalize. This implementation will
-    // call `Finalize::finalize` if it is safe to do so.
-    let drop_impl = s.unbound_impl(
-        quote!(::std::ops::Drop),
-        quote! {
-            fn drop(&mut self) {
-                if ::gc::finalizer_safe() {
-                    ::gc::Finalize::finalize(self);
+    if !is_trivially_drop {
+        // We also implement drop to prevent unsafe drop implementations on this
+        // type and encourage people to use Finalize. This implementation will
+        // call `Finalize::finalize` if it is safe to do so.
+        let drop_impl = s.unbound_impl(
+            quote!(::std::ops::Drop),
+            quote! {
+                fn drop(&mut self) {
+                    if ::gc::finalizer_safe() {
+                        ::gc::Finalize::finalize(self);
+                    }
                 }
-            }
-        },
-    );
+            },
+        );
 
-    quote! {
-        #trace_impl
-        #drop_impl
+        quote! {
+            #trace_impl
+            #drop_impl
+        }
+    } else {
+        s.bind_with(|_| BindStyle::Move);
+        let trivially_drop_body = s.each(|_| quote! {});
+        let finalize_impl = s.bound_impl(
+            quote!(::gc::Finalize),
+            quote!(
+                fn finalize(&self) {
+                    let _trivially_drop = |t: Self| match t { #trivially_drop_body };
+                }
+            ),
+        );
+
+        quote! {
+            #trace_impl
+            #finalize_impl
+        }
     }
 }
 
