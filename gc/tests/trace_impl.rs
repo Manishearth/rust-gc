@@ -45,6 +45,11 @@ struct Baz {
     b: Bar,
 }
 
+#[derive(Trace, Finalize, Copy, Clone)]
+struct CopyTrace {
+    inner: Foo,
+}
+
 #[test]
 fn test() {
     unsafe {
@@ -75,4 +80,10 @@ fn test() {
         baz.trace();
     }
     X.with(|x| assert!(*x.borrow() == 3));
+
+    let copytrace = CopyTrace { inner: Foo };
+    unsafe {
+        copytrace.trace();
+    }
+    X.with(|x| assert!(*x.borrow() == 4));
 }
