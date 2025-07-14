@@ -1,6 +1,6 @@
 [package]
 name = "gc"
-version = "0.5.0"
+version = "0.5.1"
 authors = ["Manish Goregaokar <manishsmail@gmail.com>", "Nika Layzell <nika@thelayzells.com>"]
 description = "Tracing garbage collector plugin for Rust."
 repository = "https://github.com/Manishearth/rust-gc"
