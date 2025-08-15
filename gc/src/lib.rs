@@ -32,12 +32,12 @@ mod serde;
 mod trace;
 
 #[cfg(feature = "derive")]
-pub use gc_derive::{Finalize, Trace};
+pub use gc_derive::{EmptyTrace, Finalize, Trace};
 
 // We re-export the Trace method, as well as some useful internal methods for
 // managing collections or configuring the garbage collector.
 pub use crate::gc::{finalizer_safe, force_collect};
-pub use crate::trace::{Finalize, Trace};
+pub use crate::trace::{EmptyTrace, Finalize, Trace};
 
 #[cfg(feature = "unstable-config")]
 pub use crate::gc::{configure, GcConfig};
