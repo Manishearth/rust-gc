@@ -52,7 +52,8 @@ thread_local!(static GC_STATE: RefCell<GcState> = RefCell::new(GcState {
 }));
 
 const MARK_MASK: usize = 1 << (usize::BITS - 1);
-const ROOTS_MASK: usize = !MARK_MASK;
+const FINALIZED_MASK: usize = 1 << (usize::BITS - 2);
+const ROOTS_MASK: usize = !(MARK_MASK | FINALIZED_MASK);
 const ROOTS_MAX: usize = ROOTS_MASK; // max allowed value of roots
 
 pub(crate) struct GcBoxHeader {
@@ -81,7 +82,7 @@ impl GcBoxHeader {
         // abort if the count overflows to prevent `mem::forget` loops
         // that could otherwise lead to erroneous drops
         if (roots & ROOTS_MASK) < ROOTS_MAX {
-            self.roots.set(roots + 1); // we checked that this wont affect the high bit
+            self.roots.set(roots + 1); // we checked that this wont affect the high bits
         } else {
             panic!("roots counter overflow");
         }
@@ -89,12 +90,22 @@ impl GcBoxHeader {
 
     #[inline]
     pub fn dec_roots(&self) {
-        self.roots.set(self.roots.get() - 1); // no underflow check
+        self.roots.set(self.roots.get() - 1); // no underflow check, always nonzero number of roots
     }
 
     #[inline]
     pub fn is_marked(&self) -> bool {
         self.roots.get() & MARK_MASK != 0
+    }
+
+    #[inline]
+    pub fn is_finalized(&self) -> bool {
+        self.roots.get() & FINALIZED_MASK != 0
+    }
+
+    #[inline]
+    pub fn set_finalized(&self) {
+        self.roots.set(self.roots.get() | FINALIZED_MASK)
     }
 
     #[inline]
@@ -298,9 +309,13 @@ fn collect_garbage(st: &mut GcState) {
     unsafe fn sweep(finalized: Vec<Unmarked<'_>>, bytes_allocated: &mut usize) {
         let _guard = DropGuard::new();
         for node in finalized.into_iter().rev() {
-            if node.this.as_ref().header.is_marked() {
-                continue;
-            }
+            // sanity check. If this trips we have violated an unsafe invarant.
+            // This won't catch all UB, just direct reclamation of roots!!
+            assert_eq!(
+                node.this.as_ref().header.roots(),
+                0,
+                "Reclaimed node should not be rooted"
+            );
             let incoming = node.incoming;
             let node = Box::from_raw(node.this.as_ptr());
             *bytes_allocated -= mem::size_of_val::<GcBox<_>>(&*node);
@@ -316,10 +331,16 @@ fn collect_garbage(st: &mut GcState) {
         if unmarked.is_empty() {
             return;
         }
-        for node in &unmarked {
-            Trace::finalize_glue(&node.this.as_ref().data);
+        // finalize unmarked nodes
+        for node in unmarked {
+            if !node.this.as_ref().header.is_finalized() {
+                Trace::finalize_glue(&node.this.as_ref().data);
+                node.this.as_ref().header.set_finalized();
+            }
         }
-        mark(head);
+        // rerun mark phase and reclaim unmarked finalized nodes
+        let mut unmarked = mark(head);
+        unmarked.retain(|node| node.this.as_ref().header.is_finalized());
         sweep(unmarked, &mut st.stats.bytes_allocated);
     }
 }

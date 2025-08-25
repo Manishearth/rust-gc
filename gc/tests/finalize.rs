@@ -1,4 +1,4 @@
-use gc::{Finalize, Trace};
+use gc::{Finalize, Gc, GcCell, Trace};
 use std::cell::Cell;
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
@@ -45,4 +45,32 @@ fn drop_triggers_finalize() {
         FLAGS.with(|f| assert_eq!(f.get(), Flags(0, 0)));
     }
     FLAGS.with(|f| assert_eq!(f.get(), Flags(1, 1)));
+}
+
+#[derive(Trace)]
+struct Resurrection {
+    escape: Gc<GcCell<Gc<String>>>,
+    value: Gc<String>,
+}
+
+impl Finalize for Resurrection {
+    fn finalize(&self) {
+        *self.escape.borrow_mut() = self.value.clone();
+    }
+}
+
+// run this with miri to detect UB
+// cargo +nightly miri test -p gc --test finalize
+#[test]
+fn finalizer_can_resurrect() {
+    let escape = Gc::new(GcCell::new(Gc::new(String::new())));
+    let value = Gc::new(GcCell::new(Resurrection {
+        escape: escape.clone(),
+        value: Gc::new(String::from("Hello world")),
+    }));
+    drop(value);
+
+    gc::force_collect();
+
+    assert_eq!(&**escape.borrow(), "Hello world");
 }
