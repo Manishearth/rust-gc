@@ -1,4 +1,4 @@
-use gc::{force_collect, Finalize, Gc, GcCell, Trace};
+use gc::{Finalize, Gc, GcCell, Trace, force_collect};
 use std::cell::Cell;
 use std::thread::LocalKey;
 

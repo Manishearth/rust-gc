@@ -8,13 +8,13 @@ repository = "https://github.com/Manishearth/rust-gc"
 readme = "../README.md"
 license = "MPL-2.0"
 keywords = ["garbage", "macro", "memory"]
-edition = "2018"
+edition = "2024"
 
 [lib]
 name = "gc_derive"
 proc-macro = true
 
 [dependencies]
-proc-macro2 = "1.0"
-quote = "1.0"
-synstructure = "0.13"
+proc-macro2 = "1.0.103"
+quote = "1.0.42"
+synstructure = "0.13.2"

@@ -1,6 +1,6 @@
 use crate::set_data_ptr;
 use crate::trace::Trace;
-use std::alloc::{alloc, dealloc, Layout};
+use std::alloc::{Layout, alloc, dealloc};
 use std::cell::{Cell, RefCell};
 use std::mem;
 use std::ptr::{self, NonNull};
@@ -131,9 +131,9 @@ impl<T: Trace> GcBox<T> {
 }
 
 impl<
-        #[cfg(not(feature = "nightly"))] T: Trace,
-        #[cfg(feature = "nightly")] T: Trace + Unsize<dyn Trace> + ?Sized,
-    > GcBox<T>
+    #[cfg(not(feature = "nightly"))] T: Trace,
+    #[cfg(feature = "nightly")] T: Trace + Unsize<dyn Trace> + ?Sized,
+> GcBox<T>
 {
     /// Consumes a `Box`, moving the value inside into a new `GcBox`
     /// on the heap. Adds the new `GcBox` to the thread-local `GcBox`
@@ -210,10 +210,10 @@ unsafe fn insert_gcbox(gcbox: NonNull<GcBox<dyn Trace>>) {
         }
 
         let next = st.boxes_start.replace(gcbox);
-        gcbox.as_ref().header.next.set(next);
+        unsafe { gcbox.as_ref().header.next.set(next) };
 
         // We allocated some bytes! Let's record it
-        st.stats.bytes_allocated += mem::size_of_val::<GcBox<_>>(gcbox.as_ref());
+        st.stats.bytes_allocated += mem::size_of_val::<GcBox<_>>(unsafe { gcbox.as_ref() });
     });
 }
 
@@ -231,7 +231,7 @@ impl<T: Trace + ?Sized> GcBox<T> {
     pub(crate) unsafe fn trace_inner(&self) {
         if !self.header.is_marked() {
             self.header.mark();
-            self.data.trace();
+            unsafe { self.data.trace() };
         }
     }
 }
@@ -270,11 +270,11 @@ fn collect_garbage(st: &mut GcState) {
         // Walk the tree, tracing and marking the nodes
         let mut mark_head = head.get();
         while let Some(node) = mark_head {
-            if node.as_ref().header.roots() > 0 {
-                node.as_ref().trace_inner();
+            if unsafe { node.as_ref().header.roots() } > 0 {
+                unsafe { node.as_ref().trace_inner() };
             }
 
-            mark_head = node.as_ref().header.next.get();
+            mark_head = unsafe { node.as_ref().header.next.get() };
         }
 
         // Collect a vector of all of the nodes which were not marked,
@@ -282,15 +282,15 @@ fn collect_garbage(st: &mut GcState) {
         let mut unmarked = Vec::new();
         let mut unmark_head = head;
         while let Some(node) = unmark_head.get() {
-            if node.as_ref().header.is_marked() {
-                node.as_ref().header.unmark();
+            if unsafe { node.as_ref().header.is_marked() } {
+                unsafe { node.as_ref().header.unmark() };
             } else {
                 unmarked.push(Unmarked {
                     incoming: unmark_head,
                     this: node,
                 });
             }
-            unmark_head = &node.as_ref().header.next;
+            unmark_head = unsafe { &node.as_ref().header.next };
         }
         unmarked
     }
@@ -298,11 +298,11 @@ fn collect_garbage(st: &mut GcState) {
     unsafe fn sweep(finalized: Vec<Unmarked<'_>>, bytes_allocated: &mut usize) {
         let _guard = DropGuard::new();
         for node in finalized.into_iter().rev() {
-            if node.this.as_ref().header.is_marked() {
+            if unsafe { node.this.as_ref().header.is_marked() } {
                 continue;
             }
             let incoming = node.incoming;
-            let node = Box::from_raw(node.this.as_ptr());
+            let node = unsafe { Box::from_raw(node.this.as_ptr()) };
             *bytes_allocated -= mem::size_of_val::<GcBox<_>>(&*node);
             incoming.set(node.header.next.take());
         }

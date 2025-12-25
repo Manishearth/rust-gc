@@ -12,7 +12,7 @@ struct A {
 #[derive(Trace)]
 struct B;
 
-thread_local!(static FLAGS: Cell<Flags> = Cell::new(Flags(0, 0)));
+thread_local!(static FLAGS: Cell<Flags> = const { Cell::new(Flags(0, 0)) });
 
 impl Finalize for A {
     fn finalize(&self) {

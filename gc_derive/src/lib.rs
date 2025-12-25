@@ -1,5 +1,5 @@
 use quote::quote;
-use synstructure::{decl_derive, AddBounds, Structure};
+use synstructure::{AddBounds, Structure, decl_derive};
 
 decl_derive!([Trace, attributes(unsafe_ignore_trace)] => derive_trace);
 

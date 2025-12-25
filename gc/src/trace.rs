@@ -6,14 +6,14 @@ use std::hash::BuildHasherDefault;
 use std::hash::SipHasher;
 use std::marker::PhantomData;
 use std::num::{
-    NonZeroI128, NonZeroI16, NonZeroI32, NonZeroI64, NonZeroI8, NonZeroIsize, NonZeroU128,
-    NonZeroU16, NonZeroU32, NonZeroU64, NonZeroU8, NonZeroUsize,
+    NonZeroI8, NonZeroI16, NonZeroI32, NonZeroI64, NonZeroI128, NonZeroIsize, NonZeroU8,
+    NonZeroU16, NonZeroU32, NonZeroU64, NonZeroU128, NonZeroUsize,
 };
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::atomic::{
-    AtomicBool, AtomicI16, AtomicI32, AtomicI64, AtomicI8, AtomicIsize, AtomicU16, AtomicU32,
-    AtomicU64, AtomicU8, AtomicUsize,
+    AtomicBool, AtomicI8, AtomicI16, AtomicI32, AtomicI64, AtomicIsize, AtomicU8, AtomicU16,
+    AtomicU32, AtomicU64, AtomicUsize,
 };
 
 /// The Finalize trait, which needs to be implemented on
@@ -23,14 +23,32 @@ pub trait Finalize {
 }
 
 /// The Trace trait, which needs to be implemented on garbage-collected objects.
+///
+/// # Safety
+/// Implementations of this trait must ensure that the `trace`, `root` and `unroot`
+/// methods do not cause undefined behavior when invoked by the garbage collector.
+/// In particular, implementations must only operate on GC-managed values and must
+/// preserve collector invariants.
 pub unsafe trait Trace: Finalize {
     /// Marks all contained `Gc`s.
+    ///
+    /// # Safety
+    /// Implementations must ensure that calling `trace` only accesses and marks
+    /// valid GC-managed pointers and does not otherwise cause undefined behavior.
     unsafe fn trace(&self);
 
     /// Increments the root-count of all contained `Gc`s.
+    ///
+    /// # Safety
+    /// Implementations must ensure that roots are incremented correctly and that
+    /// the method does not invalidate collector invariants.
     unsafe fn root(&self);
 
     /// Decrements the root-count of all contained `Gc`s.
+    ///
+    /// # Safety
+    /// Implementations must ensure that roots are decremented correctly and that
+    /// the method does not invalidate collector invariants.
     unsafe fn unroot(&self);
 
     /// Runs `Finalize::finalize()` on this object and all
@@ -68,8 +86,8 @@ macro_rules! custom_trace {
         #[inline]
         unsafe fn trace(&self) {
             #[inline]
-            unsafe fn mark<T: $crate::Trace + ?Sized>(it: &T) {
-                $crate::Trace::trace(it);
+            fn mark<T: $crate::Trace + ?Sized>(it: &T) {
+                unsafe { $crate::Trace::trace(it) }
             }
             let $this = self;
             $body
@@ -77,8 +95,8 @@ macro_rules! custom_trace {
         #[inline]
         unsafe fn root(&self) {
             #[inline]
-            unsafe fn mark<T: $crate::Trace + ?Sized>(it: &T) {
-                $crate::Trace::root(it);
+            fn mark<T: $crate::Trace + ?Sized>(it: &T) {
+                unsafe { $crate::Trace::root(it) }
             }
             let $this = self;
             $body
@@ -86,8 +104,8 @@ macro_rules! custom_trace {
         #[inline]
         unsafe fn unroot(&self) {
             #[inline]
-            unsafe fn mark<T: $crate::Trace + ?Sized>(it: &T) {
-                $crate::Trace::unroot(it);
+            fn mark<T: $crate::Trace + ?Sized>(it: &T) {
+                unsafe { $crate::Trace::unroot(it) }
             }
             let $this = self;
             $body
@@ -366,7 +384,7 @@ where
     T::Owned: Trace,
 {
     custom_trace!(this, {
-        if let Cow::Owned(ref v) = this {
+        if let Cow::Owned(v) = this {
             mark(v);
         }
     });

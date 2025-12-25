@@ -1,7 +1,7 @@
-use gc::{force_collect, Gc, GcCell, Trace};
+use gc::{Gc, GcCell, Trace, force_collect};
 use std::cell::Cell;
 
-thread_local!(static COUNTER: Cell<u8> = Cell::new(0u8));
+thread_local!(static COUNTER: Cell<u8> = const { Cell::new(0u8) });
 
 #[derive(Trace)]
 struct Cyclic {

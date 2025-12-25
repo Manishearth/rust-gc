@@ -1,4 +1,4 @@
-use gc::{force_collect, Finalize, Gc, Trace};
+use gc::{Finalize, Gc, Trace, force_collect};
 
 #[derive(Finalize, Trace)]
 struct S(#[unsafe_ignore_trace] Gc<()>);
