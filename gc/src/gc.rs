@@ -8,6 +8,13 @@ use std::ptr::{self, NonNull};
 #[cfg(feature = "nightly")]
 use std::marker::Unsize;
 
+#[allow(dead_code)]
+pub enum GcBoxType {
+    Standard,
+    Weak,
+    Ephemeron,
+}
+
 struct GcState {
     stats: GcStats,
     config: GcConfig,
@@ -57,6 +64,8 @@ const ROOTS_MAX: usize = ROOTS_MASK; // max allowed value of roots
 
 pub(crate) struct GcBoxHeader {
     roots: Cell<usize>, // high bit is used as mark flag
+    #[allow(dead_code)]
+    ephemeron_flag: Cell<bool>,
     next: Cell<Option<NonNull<GcBox<dyn Trace>>>>,
 }
 
@@ -65,7 +74,26 @@ impl GcBoxHeader {
     pub fn new() -> Self {
         GcBoxHeader {
             roots: Cell::new(1), // unmarked and roots count = 1
+            ephemeron_flag: Cell::new(false),
             next: Cell::new(None),
+        }
+    }
+
+    #[inline]
+    pub fn new_ephemeron(next: Option<NonNull<GcBox<dyn Trace>>>) -> Self {
+        GcBoxHeader {
+            roots: Cell::new(0),
+            ephemeron_flag: Cell::new(true),
+            next: Cell::new(next),
+        }
+    }
+
+    #[inline]
+    pub fn new_weak(next: Option<NonNull<GcBox<dyn Trace>>>) -> Self {
+        GcBoxHeader {
+            roots: Cell::new(0),
+            ephemeron_flag: Cell::new(false),
+            next: Cell::new(next),
         }
     }
 
@@ -106,11 +134,22 @@ impl GcBoxHeader {
     pub fn unmark(&self) {
         self.roots.set(self.roots.get() & !MARK_MASK);
     }
+
+    #[inline]
+    #[allow(dead_code)]
+    pub fn is_ephemeron(&self) -> bool {
+        self.ephemeron_flag.get()
+    }
+
+    #[inline]
+    pub fn is_alive(&self) -> bool {
+        // TODO: Implement proper collection logic
+        true
+    }
 }
 
-#[repr(C)] // to justify the layout computations in GcBox::from_box, Gc::from_raw
-pub(crate) struct GcBox<T: ?Sized + 'static> {
-    header: GcBoxHeader,
+pub struct GcBox<T: Trace + ?Sized + 'static> {
+    pub(crate) header: GcBoxHeader,
     data: T,
 }
 
@@ -120,9 +159,14 @@ impl<T: Trace> GcBox<T> {
     /// trigger a collection.
     ///
     /// A `GcBox` allocated this way starts its life rooted.
-    pub(crate) fn new(value: T) -> NonNull<Self> {
+    pub(crate) fn new(value: T, box_type: GcBoxType) -> NonNull<Self> {
+        let header = match box_type {
+            GcBoxType::Standard => GcBoxHeader::new(),
+            GcBoxType::Weak => GcBoxHeader::new_weak(None),
+            GcBoxType::Ephemeron => GcBoxHeader::new_ephemeron(None),
+        };
         let gcbox = NonNull::from(Box::leak(Box::new(GcBox {
-            header: GcBoxHeader::new(),
+            header,
             data: value,
         })));
         unsafe { insert_gcbox(gcbox) };
@@ -217,7 +261,7 @@ unsafe fn insert_gcbox(gcbox: NonNull<GcBox<dyn Trace>>) {
     });
 }
 
-impl<T: ?Sized> GcBox<T> {
+impl<T: Trace + ?Sized> GcBox<T> {
     /// Returns `true` if the two references refer to the same `GcBox`.
     pub(crate) fn ptr_eq(this: &GcBox<T>, other: &GcBox<T>) -> bool {
         // Use .header to ignore fat pointer vtables, to work around
@@ -234,9 +278,14 @@ impl<T: Trace + ?Sized> GcBox<T> {
             unsafe { self.data.trace() };
         }
     }
+
+    /// Trace inner data
+    pub(crate) unsafe fn weak_trace_inner(&self, queue: &mut Vec<NonNull<GcBox<dyn Trace>>>) {
+        unsafe { self.data.weak_trace(queue) };
+    }
 }
 
-impl<T: ?Sized> GcBox<T> {
+impl<T: Trace + ?Sized> GcBox<T> {
     /// Increases the root count on this `GcBox`.
     /// Roots prevent the `GcBox` from being destroyed by the garbage collector.
     pub(crate) unsafe fn root_inner(&self) {

@@ -16,6 +16,10 @@ unsafe impl Trace for Foo {
     }
     unsafe fn root(&self) {}
     unsafe fn unroot(&self) {}
+    unsafe fn is_marked_ephemeron(&self) -> bool {
+        false
+    }
+    unsafe fn weak_trace(&self, _ephemeron_queue: &mut Vec<gc::GcPointer>) {}
     fn finalize_glue(&self) {}
 }
 

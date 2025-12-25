@@ -30,6 +30,7 @@ mod gc;
 #[cfg(feature = "serde")]
 mod serde;
 mod trace;
+mod weak;
 
 #[cfg(feature = "derive")]
 pub use gc_derive::{Finalize, Trace};
@@ -38,6 +39,9 @@ pub use gc_derive::{Finalize, Trace};
 // managing collections or configuring the garbage collector.
 pub use crate::gc::{finalizer_safe, force_collect};
 pub use crate::trace::{Finalize, Trace};
+pub use crate::weak::{WeakGc, WeakPair};
+
+pub type GcPointer = NonNull<GcBox<dyn Trace>>;
 
 #[cfg(feature = "unstable-config")]
 pub use crate::gc::{GcConfig, configure};
@@ -51,7 +55,7 @@ pub use crate::gc::{GcStats, stats};
 /// A garbage-collected pointer type over an immutable value.
 ///
 /// See the [module level documentation](./) for more details.
-pub struct Gc<T: ?Sized + 'static> {
+pub struct Gc<T: Trace + ?Sized + 'static> {
     ptr_root: Cell<NonNull<GcBox<T>>>,
     marker: PhantomData<Rc<T>>,
 }
@@ -78,7 +82,7 @@ impl<T: Trace> Gc<T> {
     /// assert_eq!(*five, 5);
     /// ```
     pub fn new(value: T) -> Self {
-        unsafe { Gc::from_gcbox(GcBox::new(value)) }
+        unsafe { Gc::from_gcbox(GcBox::new(value, crate::gc::GcBoxType::Standard)) }
     }
 }
 
@@ -105,7 +109,7 @@ impl<T: Trace + ?Sized> Gc<T> {
     }
 }
 
-impl<T: ?Sized> Gc<T> {
+impl<T: Trace + ?Sized> Gc<T> {
     /// Returns `true` if the two `Gc`s point to the same allocation.
     pub fn ptr_eq(this: &Gc<T>, other: &Gc<T>) -> bool {
         GcBox::ptr_eq(this.inner(), other.inner())
@@ -131,7 +135,7 @@ impl<T: ?Sized> Gc<T> {
 }
 
 /// Returns the given pointer with its root bit cleared.
-unsafe fn clear_root_bit<T: ?Sized>(ptr: NonNull<GcBox<T>>) -> NonNull<GcBox<T>> {
+unsafe fn clear_root_bit<T: Trace + ?Sized>(ptr: NonNull<GcBox<T>>) -> NonNull<GcBox<T>> {
     let ptr = ptr.as_ptr();
     let data = ptr.cast::<u8>();
     let addr = data as isize;
@@ -139,7 +143,7 @@ unsafe fn clear_root_bit<T: ?Sized>(ptr: NonNull<GcBox<T>>) -> NonNull<GcBox<T>>
     unsafe { NonNull::new_unchecked(ptr) }
 }
 
-impl<T: ?Sized> Gc<T> {
+impl<T: Trace + ?Sized> Gc<T> {
     fn rooted(&self) -> bool {
         self.ptr_root.get().as_ptr().cast::<u8>() as usize & 1 != 0
     }
@@ -177,7 +181,22 @@ impl<T: ?Sized> Gc<T> {
     }
 }
 
-impl<T: ?Sized> Gc<T> {
+impl<T: Trace> Gc<T> {
+    #[inline]
+    pub fn clone_weak_gc(&self) -> WeakGc<T> {
+        unsafe { WeakGc::from_gc_box(self.ptr_root.get()) }
+    }
+
+    #[inline]
+    pub fn create_weak_pair<V>(&self, value: V) -> WeakPair<T, V>
+    where
+        V: Trace,
+    {
+        WeakPair::from_gc_value_pair(self.ptr_root.get(), value)
+    }
+}
+
+impl<T: Trace + ?Sized> Gc<T> {
     /// Consumes the `Gc`, returning the wrapped pointer.
     ///
     /// To avoid a memory leak, the pointer must be converted back into a `Gc`
@@ -254,12 +273,22 @@ impl<T: ?Sized> Gc<T> {
     }
 }
 
-impl<T: ?Sized> Finalize for Gc<T> {}
+impl<T: Trace + ?Sized> Finalize for Gc<T> {}
 
 unsafe impl<T: Trace + ?Sized> Trace for Gc<T> {
     #[inline]
     unsafe fn trace(&self) {
         unsafe { self.inner().trace_inner() };
+    }
+
+    #[inline]
+    unsafe fn is_marked_ephemeron(&self) -> bool {
+        false
+    }
+
+    #[inline]
+    unsafe fn weak_trace(&self, queue: &mut Vec<GcPointer>) {
+        unsafe { self.inner().weak_trace_inner(queue) };
     }
 
     #[inline]
@@ -292,7 +321,7 @@ unsafe impl<T: Trace + ?Sized> Trace for Gc<T> {
     }
 }
 
-impl<T: ?Sized> Clone for Gc<T> {
+impl<T: Trace + ?Sized> Clone for Gc<T> {
     #[inline]
     fn clone(&self) -> Self {
         unsafe {
@@ -307,7 +336,7 @@ impl<T: ?Sized> Clone for Gc<T> {
     }
 }
 
-impl<T: ?Sized> Deref for Gc<T> {
+impl<T: Trace + ?Sized> Deref for Gc<T> {
     type Target = T;
 
     #[inline]
@@ -316,7 +345,7 @@ impl<T: ?Sized> Deref for Gc<T> {
     }
 }
 
-impl<T: ?Sized> Drop for Gc<T> {
+impl<T: Trace + ?Sized> Drop for Gc<T> {
     #[inline]
     fn drop(&mut self) {
         // If this pointer was a root, we should unroot it.
@@ -335,16 +364,16 @@ impl<T: Trace + Default> Default for Gc<T> {
     }
 }
 
-impl<T: ?Sized + PartialEq> PartialEq for Gc<T> {
+impl<T: Trace + ?Sized + PartialEq> PartialEq for Gc<T> {
     #[inline(always)]
     fn eq(&self, other: &Self) -> bool {
         **self == **other
     }
 }
 
-impl<T: ?Sized + Eq> Eq for Gc<T> {}
+impl<T: Trace + ?Sized + Eq> Eq for Gc<T> {}
 
-impl<T: ?Sized + PartialOrd> PartialOrd for Gc<T> {
+impl<T: Trace + ?Sized + PartialOrd> PartialOrd for Gc<T> {
     #[inline(always)]
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         (**self).partial_cmp(&**other)
@@ -371,32 +400,32 @@ impl<T: ?Sized + PartialOrd> PartialOrd for Gc<T> {
     }
 }
 
-impl<T: ?Sized + Ord> Ord for Gc<T> {
+impl<T: Trace + ?Sized + Ord> Ord for Gc<T> {
     #[inline]
     fn cmp(&self, other: &Self) -> Ordering {
         (**self).cmp(&**other)
     }
 }
 
-impl<T: ?Sized + Hash> Hash for Gc<T> {
+impl<T: Trace + ?Sized + Hash> Hash for Gc<T> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         (**self).hash(state);
     }
 }
 
-impl<T: ?Sized + Display> Display for Gc<T> {
+impl<T: Trace + ?Sized + Display> Display for Gc<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         Display::fmt(&**self, f)
     }
 }
 
-impl<T: ?Sized + Debug> Debug for Gc<T> {
+impl<T: Trace + ?Sized + Debug> Debug for Gc<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         Debug::fmt(&**self, f)
     }
 }
 
-impl<T: ?Sized> fmt::Pointer for Gc<T> {
+impl<T: Trace + ?Sized> fmt::Pointer for Gc<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Pointer::fmt(&self.inner(), f)
     }
@@ -421,13 +450,13 @@ impl<
     }
 }
 
-impl<T: ?Sized> std::borrow::Borrow<T> for Gc<T> {
+impl<T: Trace + ?Sized> std::borrow::Borrow<T> for Gc<T> {
     fn borrow(&self) -> &T {
         self
     }
 }
 
-impl<T: ?Sized> std::convert::AsRef<T> for Gc<T> {
+impl<T: Trace + ?Sized> std::convert::AsRef<T> for Gc<T> {
     fn as_ref(&self) -> &T {
         self
     }
@@ -691,6 +720,19 @@ unsafe impl<T: Trace + ?Sized> Trace for GcCell<T> {
         match self.flags.get().borrowed() {
             BorrowState::Writing => (),
             _ => unsafe { (*self.cell.get()).trace() },
+        }
+    }
+
+    #[inline]
+    unsafe fn is_marked_ephemeron(&self) -> bool {
+        false
+    }
+
+    #[inline]
+    unsafe fn weak_trace(&self, queue: &mut Vec<GcPointer>) {
+        match self.flags.get().borrowed() {
+            BorrowState::Writing => (),
+            _ => unsafe { (*self.cell.get()).weak_trace(queue) },
         }
     }
 

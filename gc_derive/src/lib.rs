@@ -40,6 +40,12 @@ fn derive_trace(mut s: Structure<'_>) -> proc_macro2::TokenStream {
                 }
                 match *self { #trace_body }
             }
+            #[inline] unsafe fn is_marked_ephemeron(&self) -> bool {
+                false
+            }
+            #[inline] unsafe fn weak_trace(&self, _ephemeron_queue: &mut Vec<::gc::GcPointer>) {
+                // Default implementation: do nothing
+            }
             #[inline] fn finalize_glue(&self) {
                 ::gc::Finalize::finalize(self);
                 #[allow(dead_code)]

@@ -78,6 +78,10 @@ unsafe impl Trace for GcWatch {
             f.set(of);
         });
     }
+    unsafe fn is_marked_ephemeron(&self) -> bool {
+        false
+    }
+    unsafe fn weak_trace(&self, _ephemeron_queue: &mut Vec<gc::GcPointer>) {}
     fn finalize_glue(&self) {
         Finalize::finalize(self);
     }

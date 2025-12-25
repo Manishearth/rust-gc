@@ -37,6 +37,24 @@ pub unsafe trait Trace: Finalize {
     /// valid GC-managed pointers and does not otherwise cause undefined behavior.
     unsafe fn trace(&self);
 
+    /// Checks if an ephemeron's key is marked.
+    ///
+    /// Note: value should always be implemented to return false
+    ///
+    /// # Safety
+    /// Implementations must ensure that calling this method only reads
+    /// valid GC-managed state and does not cause undefined behaviour.
+    unsafe fn is_marked_ephemeron(&self) -> bool;
+
+    /// Returns true if a marked `Gc` is found
+    ///
+    /// # Safety
+    /// Implementations must ensure that calling `weak_trace` only accesses
+    /// valid GC-managed pointers and that any pointers pushed to
+    /// `ephemeron_queue` are valid `GcPointer`s pointing into the current
+    /// thread's GC chain.
+    unsafe fn weak_trace(&self, ephemeron_queue: &mut Vec<crate::GcPointer>);
+
     /// Increments the root-count of all contained `Gc`s.
     ///
     /// # Safety
@@ -65,6 +83,12 @@ macro_rules! unsafe_empty_trace {
         #[inline]
         unsafe fn trace(&self) {}
         #[inline]
+        unsafe fn is_marked_ephemeron(&self) -> bool {
+            false
+        }
+        #[inline]
+        unsafe fn weak_trace(&self, _ephemeron_queue: &mut Vec<$crate::GcPointer>) {}
+        #[inline]
         unsafe fn root(&self) {}
         #[inline]
         unsafe fn unroot(&self) {}
@@ -92,6 +116,12 @@ macro_rules! custom_trace {
             let $this = self;
             $body
         }
+        #[inline]
+        unsafe fn is_marked_ephemeron(&self) -> bool {
+            false
+        }
+        #[inline]
+        unsafe fn weak_trace(&self, _queue: &mut Vec<$crate::GcPointer>) {}
         #[inline]
         unsafe fn root(&self) {
             #[inline]
