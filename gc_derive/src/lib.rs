@@ -52,23 +52,41 @@ fn derive_trace(mut s: Structure<'_>) -> proc_macro2::TokenStream {
         },
     );
 
-    // We also implement drop to prevent unsafe drop implementations on this
-    // type and encourage people to use Finalize. This implementation will
-    // call `Finalize::finalize` if it is safe to do so.
-    let drop_impl = s.unbound_impl(
-        quote!(::std::ops::Drop),
-        quote! {
-            fn drop(&mut self) {
-                if ::gc::finalizer_safe() {
-                    ::gc::Finalize::finalize(self);
-                }
+    // Generate some code which will fail to compile if the derived type has an
+    // unsafe `drop` implementation.
+    let (impl_generics, ty_generics, where_clause) = s.ast().generics.split_for_impl();
+    let ident = &s.ast().ident;
+    let assert_not_drop = quote! {
+        // This approach to negative trait assertions is directly copied from
+        // `static_assertions` v1.1.0.
+        // https://github.com/nvzqz/static-assertions-rs/blob/18bc65a094d890fe1faa5d3ccb70f12b89eabf56/src/assert_impl.rs#L262-L287
+        const _: () = {
+            // Generic trait with a blanket impl over `()` for all types.
+            trait AmbiguousIfDrop<T> {
+                fn some_item() {}
             }
-        },
-    );
+
+            impl<T: ?::std::marker::Sized> AmbiguousIfDrop<()> for T {}
+
+            #[allow(dead_code)]
+            struct Invalid;
+            impl<T: ?::std::marker::Sized + ::std::ops::Drop> AmbiguousIfDrop<Invalid> for T {}
+
+            // If there is only one specialized trait impl, type inference with
+            // `_` can be resolved, and this will compile.
+            //
+            // Fails to compile if `AmbiguousIfDrop<Invalid>` is implemented for
+            // our type.
+            #[allow(dead_code)]
+            fn assert_not_drop #impl_generics () #where_clause {
+                let _ = <#ident #ty_generics as AmbiguousIfDrop<_>>::some_item;
+            }
+        };
+    };
 
     quote! {
         #trace_impl
-        #drop_impl
+        #assert_not_drop
     }
 }
 
